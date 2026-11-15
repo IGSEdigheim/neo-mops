@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<script>
+const LEHRERMODUS = false;
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neo-MOPS – Modellrechner</title>
+<!--
+  Neo-MOPS: Modellrechner mit Pseudo-Assembler für den Unterricht.
+  Eigenständige Neuimplementierung nach dem Vorbild von MOPS 1.04 (Marco Haase). Es wurde kein Quelltext übernommen.
+
+  MIT License – Copyright (c) 2026 Pascal Deneaux
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+  The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+  the Software.
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+  IN THE SOFTWARE.
+-->
+<style>
+/* ================= Farben und Schriften ================= */
+:root {
+  --bg: #f3f0e9; --card: #fffdf9; --ink: #1e2430; --ink2: #586273; --ink3: #8a93a1; --line: #dcd5c7;
+  --accent: #2563eb; --on-accent: #fff; --accent-soft: #e3ecfd;
+  --good: #16794a; --good-bg: #e2f4ea; --bad: #b42318; --bad-bg: #fde9e7; --warn: #8a5a00; --warn-bg: #fdf1d3;
+  --u-mem: #eceef5; --u-mem-s: #c5cbda; --u-ctl: #dcebfb; --u-ctl-s: #9fc5ee; --u-alu: #e8e3fa; --u-alu-s: #b9adea;
+  --u-io: #e0f3d9; --u-io-s: #a5d392; --cell: #ffffff; --cell-s: #bcc3d0; --bar: #fbfbfd;
+  --bus: #cdd2dc; --bus-d: #f2a900; --bus-a: #e0559b; --bus-i: #7c6ae6; --tok: #ffc933; --tok-s: #b97f00; --tok-ink: #2e2100;
+  --alu: #7c6ae6; --pcz: #2563eb; --cur: #fff3c4; --hover: #f0ece2;
+  --ui: system-ui, -apple-system, "Segoe UI", "Noto Sans", Cantarell, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "JetBrains Mono", "Cascadia Mono", "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #10141b; --card: #19202a; --ink: #e9edf3; --ink2: #a3aebd; --ink3: #738092; --line: #2b3441;
+  --accent: #6ea0ff; --on-accent: #0b1220; --accent-soft: #1d2c47;
+  --good: #4cc38a; --good-bg: #143024; --bad: #ff8a80; --bad-bg: #3a1b1a; --warn: #f2c14e; --warn-bg: #3a2e12;
+  --u-mem: #1c232e; --u-mem-s: #36414f; --u-ctl: #152a42; --u-ctl-s: #2c5687; --u-alu: #231f3c; --u-alu-s: #4b4087;
+  --u-io: #18301d; --u-io-s: #356b3e; --cell: #0e131a; --cell-s: #3b4656; --bar: #232c38;
+  --bus: #364050; --bus-d: #f2a900; --bus-a: #ff6fb3; --bus-i: #9d8cff; --tok: #ffc933; --tok-s: #7a5400; --tok-ink: #2e2100;
+  --alu: #9d8cff; --pcz: #6ea0ff; --cur: #3c3413; --hover: #232c38;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--ui); display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* ================= Kopfzeile ================= */
+.kopf { flex: none; display: flex; align-items: center; gap: 14px; padding: 8px 14px; background: var(--card); border-bottom: 1px solid var(--line); }
+.marke { display: flex; align-items: center; gap: 9px; margin: 0; font: 800 20px/1 var(--ui); letter-spacing: -.01em; white-space: nowrap; }
+.marke svg { width: 34px; height: 34px; flex: none; }
+.marke small { font: 500 13px var(--ui); color: var(--ink2); letter-spacing: 0; }
+.lehrer { background: var(--warn-bg); color: var(--warn); font: 700 12px var(--ui); padding: 3px 9px; border-radius: 99px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 11px; }
+.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--ink2); }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.luft { flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border: 1px solid var(--line); background: var(--card); border-radius: 9px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--hover); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn.rund { padding: 6px; border-radius: 50%; }
+.menue { position: relative; }
+.menue-liste { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 250px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
+.menue-liste button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.menue-liste button:hover { background: var(--hover); }
+.menue-liste button small { display: block; color: var(--ink2); }
+.menue-liste .gruppe { padding: 8px 10px 2px; font: 700 12px var(--ui); color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ================= Aufteilung ================= */
+.haupt { flex: 1; min-height: 0; display: grid; gap: 12px 0; padding: 12px 14px 12px;
+  /* --links setzt der Griff; rechts bleiben immer mindestens rund 700px für den Rechner */
+  grid-template-columns: clamp(200px, var(--links, clamp(250px, 23vw, 340px)), max(260px, calc(100vw - 760px))) 12px minmax(0, 1fr); }
+.griff { position: relative; cursor: col-resize; touch-action: none; outline: none; }
+.griff::before { content: ""; position: absolute; left: 4px; top: 50%; width: 4px; height: 44px; margin-top: -22px; border-radius: 2px; background: var(--ink3); opacity: .35; transition: opacity .15s, background .15s, height .15s, margin .15s; }
+.griff:hover::before, .griff:focus-visible::before, body.zieht .griff::before { opacity: 1; background: var(--accent); height: 72px; margin-top: -36px; }
+body.zieht { cursor: col-resize; user-select: none; }
+.karte { background: var(--card); border: 1px solid var(--line); border-radius: 14px; min-height: 0; min-width: 0; }
+.links { display: flex; flex-direction: column; overflow: hidden; }
+.rechts { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+
+/* ---------- Editor ---------- */
+.ktitel { flex: none; display: flex; align-items: center; gap: 8px; padding: 9px 12px 7px; }
+.ktitel h2 { margin: 0; font: 700 15px var(--ui); }
+.reiter { display: inline-flex; gap: 2px; }
+.reiter button { border: 0; background: none; padding: 3px 9px; border-radius: 7px; cursor: pointer; font: 700 15px var(--ui); color: var(--ink3); }
+.reiter button[aria-pressed="true"] { color: var(--ink); background: var(--bg); }
+.chip { margin-left: auto; font: 600 12.5px var(--ui); padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.chip.ok { background: var(--good-bg); color: var(--good); }
+.chip.fehler { background: var(--bad-bg); color: var(--bad); }
+.chip.leer { background: var(--bg); color: var(--ink2); }
+.editor { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); --lh: 23px; font: 15px/var(--lh) var(--mono); background: var(--cell); }
+.rinne { flex: none; width: 40px; overflow: hidden; text-align: right; color: var(--ink3); background: var(--bg); padding: 8px 0; user-select: none; font-size: 12.5px; }
+.rinne div { height: var(--lh); padding-right: 8px; }
+.rinne .err { color: var(--bad); font-weight: 700; box-shadow: inset 3px 0 var(--bad); }
+.rinne .wrn { box-shadow: inset 3px 0 var(--warn); }
+.rinne .cur { color: var(--ink); font-weight: 700; background: var(--cur); }
+.code { position: relative; flex: 1; min-width: 0; }
+.code pre, .code textarea { position: absolute; inset: 0; margin: 0; padding: 8px 10px; border: 0; font: inherit; white-space: pre; tab-size: 4; -moz-tab-size: 4; }
+.code pre { overflow: hidden; pointer-events: none; }
+.code pre > div { display: inline-block; min-width: 100%; }
+.code pre .z { height: var(--lh); }
+.code pre .z.cur { background: var(--cur); box-shadow: 0 0 0 100vmax var(--cur); clip-path: inset(0 -100vmax); }
+.code pre .z.err { text-decoration: underline wavy var(--bad); text-underline-offset: 3px; }
+.code textarea { background: transparent; color: transparent; caret-color: var(--ink); resize: none; outline: none; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.t-k { color: var(--accent); font-weight: 700; } .t-n { color: #b45309; } .t-v { color: var(--good); font-weight: 600; }
+.t-l { color: #a21caf; } .t-c { color: var(--ink3); font-style: italic; } .t-x { color: var(--bad); }
+:root[data-theme="dark"] .t-n { color: #f5b461; } :root[data-theme="dark"] .t-l { color: #e39bf0; }
+.meld { flex: none; max-height: 34%; overflow: auto; padding: 8px 10px; display: grid; gap: 5px; scrollbar-width: thin; }
+.meld p { margin: 0; color: var(--ink2); font-size: 13.5px; }
+.meld button { text-align: left; border: 0; border-radius: 8px; padding: 6px 9px; cursor: pointer; font-size: 13.5px; line-height: 1.35; }
+.meld button b { margin-right: 4px; }
+.meld .err { background: var(--bad-bg); color: var(--bad); }
+.meld .wrn { background: var(--warn-bg); color: var(--warn); }
+.prot { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--line); font: 12.5px/1.5 var(--mono); scrollbar-width: thin; }
+.prot table { border-collapse: collapse; width: 100%; }
+.prot th, .prot td { padding: 1px 6px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.prot th { position: sticky; top: 0; background: var(--bg); font-weight: 700; }
+.prot td:nth-child(3), .prot th:nth-child(3) { text-align: left; }
+.protfuss { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; color: var(--ink2); }
+
+/* ---------- Rechner ---------- */
+.szene { position: relative; flex: 1; min-height: 0; padding: 6px; }
+.szene svg { display: block; width: 100%; height: 100%; }
+.eingabe { position: absolute; display: flex; gap: 4px; z-index: 5; }
+.eingabe input { min-width: 0; flex: 1; padding: 0 8px; border: 2.5px solid var(--bus-d); border-radius: 8px; background: var(--cell); font: 700 16px var(--mono); text-align: center; box-shadow: 0 0 0 5px rgba(242,169,0,.25); }
+.eingabe input { animation: ruf 1.4s ease-in-out infinite; }
+@keyframes ruf { 50% { box-shadow: 0 0 0 9px rgba(242,169,0,.12); } }
+.eingabe input.falsch { animation: none; border-color: var(--bad); box-shadow: 0 0 0 5px rgba(180,35,24,.22); }
+.eingabe.wert input { animation: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); padding: 0 2px; }
+.reg.wahl { outline: none; } svg:not(.belegt) .reg.wahl { cursor: pointer; }
+svg:not(.belegt) .reg.wahl:hover .box, .reg.wahl:focus-visible .box { stroke: var(--accent); stroke-width: 2; }
+.eingabe button { flex: none; border: 0; border-radius: 8px; padding: 0 10px; background: var(--accent); color: var(--on-accent); font-weight: 800; cursor: pointer; }
+.zeile { flex: none; display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 8px 14px; font-size: 16.5px; line-height: 1.3; }
+.zeile .ph { flex: none; box-sizing: border-box; width: 112px; text-align: center; font: 800 12px var(--ui); letter-spacing: .06em; text-transform: uppercase; padding: 4px 10px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.zeile.fehler { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); font-weight: 600; }
+.zeile.fertig { background: var(--good-bg); color: var(--good); border-color: var(--good); font-weight: 600; }
+.steuer { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 10px; }
+.steuer .btn { padding: 8px 14px; font-size: 15.5px; }
+.btn.start { background: var(--accent); border-color: var(--accent); color: var(--on-accent); min-width: 118px; justify-content: center; }
+.btn.start:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+.tempo { display: flex; align-items: center; gap: 8px; margin-left: 6px; color: var(--ink2); font-weight: 600; }
+.tempo input { width: 130px; accent-color: var(--accent); }
+.tempo output { min-width: 62px; color: var(--ink); }
+.steuer label.opt { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); font-weight: 600; }
+.steuer .weite { margin-left: -6px; }
+.steuer .weite select { width: 32px; height: 100%; min-height: 38px; padding: 0; color: transparent; cursor: pointer; appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background: linear-gradient(45deg, transparent 50%, var(--ink2) 50%) calc(50% - 3.5px) 55% / 7px 7px no-repeat, linear-gradient(135deg, var(--ink2) 50%, transparent 50%) calc(50% + 3.5px) 55% / 7px 7px no-repeat, var(--card); }
+.steuer .weite select:hover { background-color: var(--hover); }
+.steuer .weite select option { color: var(--ink); }
+.steuer select { padding: 8px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+.steuer input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
+.fuss { flex: none; margin: 0; padding: 5px 12px 7px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Zeichnung ---------- */
+.unit { stroke-width: 1.5; }
+.u-mem { fill: var(--u-mem); stroke: var(--u-mem-s); } .u-ctl { fill: var(--u-ctl); stroke: var(--u-ctl-s); }
+.u-alu { fill: var(--u-alu); stroke: var(--u-alu-s); } .u-io { fill: var(--u-io); stroke: var(--u-io-s); }
+.utitel { font: 800 14px var(--ui); fill: var(--ink2); letter-spacing: .08em; text-transform: uppercase; }
+.sub { font: 700 12px var(--ui); fill: var(--ink3); letter-spacing: .05em; text-transform: uppercase; paint-order: stroke; stroke: var(--u-mem); stroke-width: 7px; stroke-linejoin: round; }
+.bar { fill: var(--bar); stroke: var(--cell-s); stroke-width: 1.2; }
+.bartxt { font: 700 12.5px var(--ui); fill: var(--ink3); letter-spacing: .32em; text-anchor: middle; dominant-baseline: central; text-transform: uppercase; }
+.box { fill: var(--cell); stroke: var(--cell-s); stroke-width: 1.4; }
+.val { font: 600 16px var(--mono); fill: var(--ink); text-anchor: middle; dominant-baseline: central; }
+.val.links { text-anchor: start; font: 500 15px var(--ui); }
+.gross .val { font-size: 24px; font-weight: 700; }
+.lab { font: 600 13px var(--ui); fill: var(--ink2); }
+.adr { font: 12px var(--mono); fill: var(--ink3); text-anchor: end; dominant-baseline: central; }
+.name { font: 800 15px var(--mono); fill: var(--good); dominant-baseline: central; }
+.leer .val { opacity: .26; }
+svg.ein .leer .box { opacity: .32; stroke-dasharray: 3 3; }
+svg.ein .adr.frei { opacity: .35; }
+.reg { transform-box: fill-box; transform-origin: center; }
+.reg.quelle .box { stroke: var(--tok-s); stroke-width: 3; fill: color-mix(in srgb, var(--tok) 28%, var(--cell)); }
+.reg.sel .box { stroke: var(--bus-a); stroke-width: 2.6; }
+.reg.pcz .box { stroke: var(--pcz); stroke-width: 2.4; }
+.reg.pop { animation: huepf .5s cubic-bezier(.3,1.6,.5,1); }
+.reg.pop .box { animation: blitz .9s ease-out; }
+.reg.puls .box { animation: puls .7s ease-in-out; }
+.reg.puls .alu { animation: alupuls .7s ease-in-out; }
+@keyframes alupuls { 50% { filter: brightness(1.45); } }
+@keyframes huepf { 0% { transform: scale(1); } 35% { transform: scale(1.13); } 100% { transform: scale(1); } }
+@keyframes blitz { 0%, 25% { fill: var(--tok); } 100% { fill: var(--cell); } }
+@keyframes puls { 0%, 100% { stroke-width: 1.4; } 50% { stroke: var(--bus-i); stroke-width: 4; } }
+.zeiger { fill: var(--pcz); transition: transform .45s cubic-bezier(.4,0,.2,1), opacity .2s; }
+.zeiger-txt { fill: #fff; }
+.bus { fill: none; stroke: var(--bus); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.bus.duenn { stroke-width: 3; }
+.bus.a { stroke: color-mix(in srgb, var(--bus-a) 38%, var(--bus)); }
+.bus.d { stroke: color-mix(in srgb, var(--bus-d) 42%, var(--bus)); }
+svg.flott .zeiger { transition-duration: .12s; }
+svg.flott .reg.pop { animation: none; }
+svg.flott .reg.pop .box { animation-duration: .35s; }
+.trace { fill: none; stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; transition: opacity .6s; }
+.trace.d { stroke: var(--bus-d); } .trace.a { stroke: var(--bus-a); } .trace.i { stroke: var(--bus-i); }
+.tok { filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+.tok rect { fill: var(--tok); stroke: var(--tok-s); stroke-width: 1.5; }
+.tok.a rect { fill: var(--bus-a); stroke: none; } .tok.i rect { fill: var(--bus-i); stroke: none; }
+.tok text { font: 700 14.5px var(--mono); fill: var(--tok-ink); text-anchor: middle; dominant-baseline: central; }
+.tok.a text, .tok.i text { fill: #fff; }
+.alu { fill: var(--alu); }
+.alusym { font: 800 26px var(--mono); fill: #fff; text-anchor: middle; dominant-baseline: central; }
+.pille rect { fill: var(--cell); stroke: var(--u-ctl-s); stroke-width: 1.2; transition: fill .25s; }
+.pille text { font: 700 12px var(--ui); fill: var(--ink3); text-anchor: middle; dominant-baseline: central; transition: fill .25s; }
+.pille.an rect { fill: var(--accent); stroke: var(--accent); } .pille.an text { fill: var(--on-accent); }
+.hinweis { font: 500 15px var(--ui); fill: var(--ink2); dominant-baseline: central; }
+.hinweis.gr { font: 700 20px var(--mono); fill: var(--ink); }
+.legende { font: 600 11.5px var(--ui); fill: var(--ink3); dominant-baseline: central; }
+
+/* ---------- Dialog ---------- */
+dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--ink); padding: 0; width: min(760px, 94vw); max-height: 90vh; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+dialog::backdrop { background: rgba(10,14,20,.5); }
+.dkopf { display: flex; align-items: center; padding: 14px 18px 8px; position: sticky; top: 0; background: var(--card); }
+.dkopf h2 { margin: 0; font: 800 19px var(--ui); flex: 1; }
+.dinh { padding: 0 18px 18px; }
+.dinh table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+.dinh th, .dinh td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.dinh td:last-child, .dinh td:first-child { white-space: nowrap; }
+.dinh code { font: 600 14px var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 5px; white-space: nowrap; }
+.dinh h3 { margin: 16px 0 6px; font: 700 15px var(--ui); }
+.dinh ul { margin: 0; padding-left: 20px; } .dinh li { margin: 3px 0; }
+.nuradv { display: none !important; } body.adv .nuradv { display: inline-flex !important; }
+body.adv td.nuradv, body.adv th.nuradv { display: table-cell !important; }
+
+/* ---------- Kleine Fenster: untereinander, die Seite darf scrollen ---------- */
+@media (max-width: 999px), (max-height: 599px) {
+  body { height: auto; min-height: 100vh; overflow: auto; }
+  .haupt { grid-template-columns: minmax(0, 1fr); } .griff { display: none; }
+  .links { height: 340px; }
+  .szene { flex: none; aspect-ratio: 128 / 70; }
+  .kopf { flex-wrap: wrap; }
+}
+@media (max-width: 1250px) { .marke small, .btn .lang { display: none; } }
+@media (max-width: 1500px) { body.adv .steuer .lang { display: none; } }
+.kurz { display: none; }
+@media (max-width: 1300px) {
+  body.adv .steuer { gap: 8px; }
+  body.adv .steuer .btn { padding: 8px 11px; }
+  body.adv .btn.start { min-width: 104px; }
+  body.adv .tempo { margin-left: 0; gap: 6px; }
+  body.adv .tempo input { width: 84px; }
+  body.adv .steuer .weg { display: none; }
+  body.adv .steuer .kurz { display: inline; }
+}
+@media (max-width: 1100px) { body.adv .tempo output { display: none; } }
+@media (prefers-reduced-motion: reduce) { .reg.pop, .reg.pop .box, .reg.puls .box { animation-duration: .01s; } }
+</style>
+</head>
+<body>
+<header class="kopf">
+  <h1 class="marke">
+    <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M5 9c-3 3-3 10 1 14l5-10z" fill="#4a3728"/><path d="M35 9c3 3 3 10-1 14l-5-10z" fill="#4a3728"/><ellipse cx="20" cy="21" rx="15" ry="14.5" fill="#e3bf8c"/><ellipse cx="20" cy="27" rx="10" ry="8.5" fill="#4a3728"/><circle cx="12.5" cy="18" r="3.4" fill="#fff"/><circle cx="27.5" cy="18" r="3.4" fill="#fff"/><circle cx="13" cy="18.4" r="2.1" fill="#1b1410"/><circle cx="27" cy="18.4" r="2.1" fill="#1b1410"/><ellipse cx="20" cy="23.4" rx="3" ry="2" fill="#1b1410"/><path d="M15.5 29.5q4.5 3.5 9 0" fill="none" stroke="#e3bf8c" stroke-width="1.6" stroke-linecap="round"/><path d="M15 11.5q5-2 10 0" fill="none" stroke="#b9925c" stroke-width="1.4" stroke-linecap="round"/></svg>
+    Neo-MOPS <small>Modellrechner</small>
+  </h1>
+  <span class="lehrer" id="lehrerMarke" hidden>Lehrermodus</span>
+  <div class="seg" role="group" aria-label="Ansicht">
+    <button id="modEin" aria-pressed="true">Einfach</button>
+    <button id="modAdv" aria-pressed="false">Fortgeschritten</button>
+  </div>
+  <span class="luft"></span>
+  <div class="menue">
+    <button class="btn" id="bspBtn" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h10"/></svg>Beispiele</button>
+    <div class="menue-liste" id="bspListe" hidden></div>
+  </div>
+  <button class="btn" id="oeffnenBtn" title="Quelltext aus einer Datei öffnen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="lang">Öffnen</span></button>
+  <button class="btn" id="speichernBtn" title="Quelltext als Datei speichern"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg><span class="lang">Speichern</span></button>
+  <button class="btn" id="hilfeBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 1 1 3.6 2.4c-.8.4-1.1 1-1.1 1.8M12 17h.01"/></svg>Befehle</button>
+  <button class="btn rund" id="themaBtn" aria-label="Helles oder dunkles Design"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></button>
+  <input type="file" id="datei" accept=".ass,.txt,.json,text/plain,application/json" hidden>
+</header>
+
+<main class="haupt">
+  <section class="karte links" aria-label="Programm">
+    <div class="ktitel">
+      <h2 id="progTitel">Programm</h2>
+      <div class="reiter" id="reiter" hidden>
+        <button id="tabProg" aria-pressed="true">Programm</button>
+        <button id="tabProt" aria-pressed="false">Protokoll</button>
+      </div>
+      <span class="chip leer" id="chip"></span>
+    </div>
+    <div class="editor" id="editor">
+      <div class="rinne" id="rinne" aria-hidden="true"></div>
+      <div class="code"><pre id="farbe" aria-hidden="true"></pre><textarea id="src" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off" aria-label="Assembler-Quelltext"></textarea></div>
+    </div>
+    <div class="meld" id="meld"></div>
+    <div class="prot" id="prot" hidden></div>
+    <div class="protfuss" id="protFuss" hidden><button class="btn" id="protKopie">Protokoll kopieren</button><span id="protInfo"></span></div>
+    <p class="fuss">© 2026 Pascal Deneaux · MIT-Lizenz</p>
+  </section>
+
+  <div class="griff" id="griff" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Breite des Programmbereichs" title="Ziehen ändert die Breite, Doppelklick stellt sie zurück"></div>
+  <section class="rechts" aria-label="Rechner">
+    <div class="karte szene" id="szene">
+      <svg id="svg" viewBox="0 0 1280 700" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Schematische Darstellung des Modellrechners"></svg>
+      <form class="eingabe" id="eingabe" hidden><input id="einFeld" type="text" inputmode="numeric" autocomplete="off" aria-label="Eingabe: ganze Zahl"><button type="submit" aria-label="Eingabe bestätigen">↵</button></form>
+      <form class="eingabe wert" id="wert" hidden><input id="wertFeld" type="text" inputmode="numeric" autocomplete="off" aria-label="Neuer Wert: ganze Zahl"></form>
+    </div>
+    <div class="karte zeile" id="zeile"><span class="ph" id="phase" hidden></span><span id="text"></span></div>
+    <div class="karte steuer">
+      <button class="btn start" id="startBtn"></button>
+      <button class="btn" id="schrittBtn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5v14l10-7zM17 5h2.5v14H17z"/></svg><span id="schrittTxt">Schritt</span></button>
+      <label class="opt nuradv weite"><select id="gran" aria-label="Wie weit ein Klick auf den Schrittknopf läuft" title="Wie weit ein Klick auf den Schrittknopf läuft"><option value="mikro">Mikroschritt</option><option value="phase">Phase</option><option value="befehl">Befehl</option></select></label>
+      <button class="btn" id="resetBtn" title="Zurücksetzen (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5v5h5M5 10a8 8 0 1 1-1 6"/></svg><span class="lang">Zurücksetzen</span></button>
+      <label class="tempo"><span class="weg">Tempo</span> <input type="range" id="tempo" min="1" max="5" step="1" aria-label="Tempo"><output id="tempoTxt"></output></label>
+      <label class="opt nuradv"><input type="checkbox" id="ausStopp"> <span class="lang">Bei Ausgabe anhalten</span><span class="kurz">Ausgabestopp</span></label>
+    </div>
+  </section>
+</main>
+
+<dialog id="hilfe" aria-labelledby="hilfeTitel">
+  <div class="dkopf"><h2 id="hilfeTitel">Befehle und Schreibweise</h2><button class="btn" id="hilfeZu">Schließen</button></div>
+  <div class="dinh" id="hilfeInhalt"></div>
+</dialog>
+
+<script>
+"use strict";
+/* <KERN> ================= Rechenkern: Assembler und Rechner (ohne Oberfläche) ================= */
+const MAXWERT = 9999, PROGZELLEN = 64, DATEN0 = 64, ZELLEN = 72;
+const p2 = n => String(n).padStart(2, "0");
+const z4 = v => (v < 0 ? "−" : "") + String(Math.abs(v)).padStart(4, "0");
+const zahl = v => (v < 0 ? "−" : "") + Math.abs(v);
+const varName = adr => "abcdefgh"[adr - DATEN0];
+
+/* Befehlssatz: adr/val/ziel = Befehlscode für diese Operandenart. Texte: {akk}/{dat} werden durch den Operanden ersetzt. */
+const BEFEHLE = {
+  ld:  { adr: 10, val: 11, text: "Lade {akk} in den Akku", bsp: "ld a" },
+  st:  { adr: 12, text: "Speichere den Akku in {ort}", bsp: "st b" },
+  in:  { adr: 20, text: "Lies eine Eingabe und speichere sie in {ort}", bsp: "in a" },
+  out: { adr: 22, val: 23, text: "Gib {akk} aus", bsp: "out c" },
+  add: { adr: 30, val: 31, sym: "+", text: "Addiere {akk} zum Akku", bsp: "add 1" },
+  sub: { adr: 32, val: 33, sym: "−", text: "Subtrahiere {akk} vom Akku", bsp: "sub b" },
+  mul: { adr: 34, val: 35, sym: "·", text: "Multipliziere den Akku mit {dat}", bsp: "mul 2" },
+  div: { adr: 36, val: 37, sym: ":", text: "Teile den Akku durch {akk} (ohne Rest)", bsp: "div 2" },
+  mod: { adr: 38, val: 39, sym: "mod", text: "Berechne den Rest beim Teilen des Akkus durch {akk}", bsp: "mod 2" },
+  cmp: { adr: 40, val: 41, sym: "?", text: "Vergleiche den Akku mit {dat}", bsp: "cmp 0" },
+  jmp: { ziel: 50, text: "Springe zu Adresse {ziel}", bsp: "jmp start" },
+  jlt: { ziel: 52, rel: "<", wort: "kleiner", text: "Springe zu Adresse {ziel}, wenn der Akku kleiner war", bsp: "jlt #4" },
+  jeq: { ziel: 54, rel: "=", wort: "gleich", text: "Springe zu Adresse {ziel}, wenn der Akku gleich war", bsp: "jeq fertig" },
+  jgt: { ziel: 56, rel: ">", wort: "größer", text: "Springe zu Adresse {ziel}, wenn der Akku größer war", bsp: "jgt weiter" },
+  end: { ohne: 60, text: "Ende des Programms", bsp: "end" },
+};
+const VERWECHSELT = { load: "ld", lade: "ld", store: "st", save: "st", input: "in", read: "in", output: "out", print: "out", write: "out",
+  jump: "jmp", goto: "jmp", je: "jeq", jl: "jlt", jg: "jgt", ende: "end", stop: "end", halt: "end", plus: "add", minus: "sub", mult: "mul", compare: "cmp" };
+
+function abstand(a, b) {   // Levenshtein-Abstand für „Meintest du …?“
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function vorschlag(wort) {
+  if (VERWECHSELT[wort]) return VERWECHSELT[wort];
+  let best = null, bd = 9;
+  for (const b in BEFEHLE) { const d = abstand(wort, b); if (d < bd) { bd = d; best = b; } }
+  return bd <= 1 || (bd === 2 && wort.length >= 4) ? best : null;
+}
+function befehlsText(c) {   // Beschreibung eines kodierten Befehls in Worten
+  const b = BEFEHLE[c.mn], n = c.art === "adr" ? varName(c.arg) : "";
+  return b.text
+    .replace("{akk}", c.art === "adr" ? "den Wert von " + n : "die Zahl " + zahl(c.arg))
+    .replace("{dat}", c.art === "adr" ? "dem Wert von " + n : "der Zahl " + zahl(c.arg))
+    .replace("{ort}", n).replace("{ziel}", p2(c.arg));
+}
+
+/* Übersetzt den Quelltext. Ergebnis: { ok, fehler: [{zeile, text}], warnungen: [...], zellen: [{op, arg, mn, art, txt, zeile}] } */
+function uebersetze(quelle) {
+  const zeilen = String(quelle).replace(/\r\n?/g, "\n").split("\n");
+  const fehler = [], warnungen = [], zellen = [], marken = {}, spruenge = [], adrDerZeile = {};
+  const F = (zeile, text) => fehler.push({ zeile, text }), W = (zeile, text) => warnungen.push({ zeile, text });
+  let ende = false, hatCmp = false, ersterBedingter = 0, zuLang = false;
+  zeilen.forEach((roh, i) => {
+    const zeile = i + 1;
+    let t = roh.split(";")[0];
+    if (!t.trim()) return;
+    if (ende) { if (ende === true) { W(zeile, "Nach end wird nichts mehr ausgeführt. Diese Zeilen werden übersprungen."); ende = 2; } return; }
+    let marke = null;
+    const dp = t.indexOf(":");
+    if (dp >= 0) {
+      marke = t.slice(dp + 1).trim().toLowerCase(); t = t.slice(0, dp);
+      if (!t.trim()) return F(zeile, "Vor der Marke fehlt der Befehl. Eine Marke steht rechts neben einem Befehl, zum Beispiel: ld a :start");
+      if (!marke) { F(zeile, "Nach dem Doppelpunkt fehlt der Name der Marke."); marke = null; }
+      else if (!/^[a-z]/.test(marke)) { F(zeile, `Die Marke „${marke}“ muss mit einem Buchstaben beginnen.`); marke = null; }
+      else if (!/^[a-z0-9]+$/.test(marke)) { F(zeile, `Die Marke „${marke}“ darf nur aus Buchstaben (ohne Umlaute) und Ziffern bestehen.`); marke = null; }
+      else if (marken[marke]) { F(zeile, `Die Marke „${marke}“ gibt es schon in Zeile ${marken[marke].zeile}.`); marke = null; }
+    }
+    adrDerZeile[zeile] = zellen.length;   // auch bei einem Fehler in der Zeile, damit Sprünge hierher keine Folgefehler melden
+    if (marke) marken[marke] = { zeile, adr: zellen.length, benutzt: false };
+    const teile = t.trim().split(/\s+/), mn = teile[0].toLowerCase(), arg = teile.slice(1).join(" ").toLowerCase(), b = BEFEHLE[mn];
+    if (!Object.prototype.hasOwnProperty.call(BEFEHLE, mn)) {
+      const v = vorschlag(mn);
+      return F(zeile, `Den Befehl „${teile[0]}“ gibt es nicht.` + (v ? ` Meintest du „${v}“?` : ""));
+    }
+    if (zellen.length >= PROGZELLEN) { if (!zuLang) F(zeile, `Das Programm ist zu lang. Es passen höchstens ${PROGZELLEN} Befehle in den Speicher.`); zuLang = true; return; }
+    const c = { op: 0, arg: 0, mn, art: null, txt: mn, zeile };
+    if (b.ohne) {
+      // Wie im Original: Ein end mit Operand hält das Programm an dieser Stelle an, gilt aber nicht als Abschluss des Quelltexts.
+      if (arg) W(zeile, "end braucht keinen Operanden. Das Programm hält hier an, der Quelltext muss trotzdem mit einem end ohne Operand enden.");
+      else ende = true;
+      c.op = b.ohne;
+    } else {
+      if (!arg) return F(zeile, `Hinter „${mn}“ fehlt der Operand, zum Beispiel: ${b.bsp}`);
+      let m;
+      if (b.ziel) {
+        c.op = b.ziel; c.art = "ziel";
+        if ((m = /^#\s*(\d+)$/.exec(arg))) spruenge.push({ c, zeile, nr: +m[1] });
+        else if (/^[a-z][a-z0-9]*$/.test(arg)) spruenge.push({ c, zeile, marke: arg });
+        else if (/^\d+$/.test(arg)) return F(zeile, `„${arg}“ ist kein Sprungziel. Für Zeile ${arg} schreibst du #${arg}, sonst den Namen einer Marke.`);
+        else return F(zeile, `„${arg}“ ist kein Sprungziel. Erlaubt sind eine Zeilennummer wie #4 oder der Name einer Marke.`);
+        if (!b.rel) { /* jmp */ } else if (!ersterBedingter) ersterBedingter = zeile;
+      } else {
+        if ((m = /^\$\s*(\d+)$/.exec(arg))) {
+          const adr = +m[1];
+          if (adr < DATEN0 || adr >= ZELLEN) return F(zeile, `Die Adresse $${m[1]} ist nicht erlaubt. Für Daten gibt es nur $64 bis $71 (oder a bis h).`);
+          c.art = "adr"; c.arg = adr; c.txt = mn + " $" + adr;
+        } else if (/^[a-h]$/.test(arg)) { c.art = "adr"; c.arg = DATEN0 + "abcdefgh".indexOf(arg); c.txt = mn + " " + arg; }
+        else if (/^[+-]?\d+$/.test(arg)) {
+          const v = parseInt(arg, 10);
+          if (v > MAXWERT) return F(zeile, `Die Zahl ${arg} ist zu groß. Erlaubt sind −${MAXWERT} bis ${MAXWERT}.`);
+          if (v < -MAXWERT) return F(zeile, `Die Zahl ${arg} ist zu klein. Erlaubt sind −${MAXWERT} bis ${MAXWERT}.`);
+          c.art = "val"; c.arg = v; c.txt = mn + " " + zahl(v);
+        } else if (/^[i-z]$/.test(arg)) return F(zeile, `Die Variable „${arg}“ gibt es nicht. Es gibt nur a bis h.`);
+        else return F(zeile, `Mit „${teile.slice(1).join(" ")}“ kann ${mn} nichts anfangen. Erlaubt ist eine Variable (a bis h), eine Adresse ($64 bis $71)${b.val ? " oder eine ganze Zahl" : ""}.`);
+        if (!b[c.art]) return F(zeile, `${mn} braucht eine Variable (a bis h) oder eine Adresse ($64 bis $71), keine Zahl.`);
+        c.op = b[c.art];
+        if (mn === "cmp") hatCmp = true;
+      }
+    }
+    zellen.push(c);
+  });
+  for (const s of spruenge) {
+    let adr;
+    if (s.marke !== undefined) {
+      const m = marken[s.marke];
+      if (!m) { F(s.zeile, `Die Marke „${s.marke}“ gibt es nicht. Eine Marke legst du mit Doppelpunkt rechts neben einem Befehl an, zum Beispiel: ld a :${s.marke}`); continue; }
+      m.benutzt = true; adr = m.adr;
+    } else {
+      adr = adrDerZeile[s.nr];
+      if (adr === undefined) { F(s.zeile, `In Zeile ${s.nr} steht kein Befehl, dorthin kann nicht gesprungen werden.`); continue; }
+    }
+    s.c.arg = adr; s.c.txt = s.c.mn + " " + p2(adr);
+  }
+  for (const n in marken) if (!marken[n].benutzt) W(marken[n].zeile, `Die Marke „${n}“ wird nie angesprungen.`);
+  if (ersterBedingter && !hatCmp) F(ersterBedingter, "Ein bedingter Sprung braucht vorher einen Vergleich mit cmp.");
+  if (!zellen.length && !fehler.length) F(0, "Der Quelltext enthält noch keinen Befehl.");
+  else if (!ende && !fehler.some(f => /zu lang/.test(f.text))) F(0, "Am Ende des Programms fehlt der Befehl end.");
+  fehler.sort((a, b) => a.zeile - b.zeile); warnungen.sort((a, b) => a.zeile - b.zeile);
+  return { ok: !fehler.length, fehler, warnungen, zellen: fehler.length ? [] : zellen, leer: !zellen.length && fehler.length === 1 && fehler[0].zeile === 0 && !ende };
+}
+
+/* Der Rechner. befehl() liefert die Schritte eines Befehlszyklus nacheinander. Jeder Schritt beschreibt, was passiert
+   (txt für „Fortgeschritten“, stxt für „Einfach“), welche Werte wandern (mv, smv) und ändert mit set() den Zustand.
+   Felder: ph Phase (F Holen, D Dekodieren, X Ausführen) · einfach: Schritt ist in der einfachen Ansicht sichtbar ·
+   phasenEnde, ende (Befehl fertig), ausgabe, eingabe (set bekommt den Wert) · puls: Bauteil ohne Übertragung hervorheben */
+class Rechner {
+  constructor(zellen, daten) { this.zellen = zellen || []; this.daten = daten || new Array(8).fill(0); this.reset(); }   // daten: Inhalt von a bis h
+  reset() {   // wie bei einem echten Rechner bleibt der Datenspeicher stehen, nur die Register beginnen neu
+    Object.assign(this, { pc: 0, ir: null, dek: "", opd: 0, acc: 0, alu: "", erg: 0, vgl: "", vglTxt: "", rechnung: "", ein: 0, aus: 0,
+      ausgaben: [], sel: -1, fertig: false, fehler: null, anzahl: 0 });
+  }
+  wert(adr) { return this.daten[adr - DATEN0]; }
+  *befehl() {
+    const m = this, a = m.pc, c = m.zellen[a];
+    if (!c) { yield { ph: "F", einfach: true, txt: "An dieser Adresse steht kein Befehl.", set() { m.fehler = `An Adresse ${p2(a)} steht kein Befehl.`; } }; return; }
+    const b = BEFEHLE[c.mn], x = c.arg, adr = c.art === "adr", n = adr ? varName(x) : "", quelle = adr ? "mem:" + x : "ir.arg";
+    const fertig = () => { m.anzahl++; m.sel = -1; };
+    // ---- Holen ----
+    yield { ph: "F", txt: `Der Befehlszähler zeigt auf Adresse ${p2(a)}. Die Adresse geht an den Speicher.`,
+      mv: [{ von: "pc", nach: "mem:" + a, wert: p2(a), bus: "a" }], set() { m.sel = a; } };
+    yield { ph: "F", einfach: true, txt: `Der Inhalt der Zelle ${p2(a)} wird ins Befehlsregister geholt.`, stxt: `Der Befehl aus Zelle ${p2(a)} wird geholt: ${c.txt}`,
+      mv: [{ von: "mem:" + a, nach: "ir", zelle: c, bus: "d" }], set() { m.ir = c; m.dek = ""; m.sel = -1; } };
+    yield { ph: "F", phasenEnde: true, puls: "pc", txt: `Der Befehlszähler wird um 1 erhöht und zeigt jetzt auf Adresse ${p2(a + 1)}.`, set() { m.pc = a + 1; } };
+    // ---- Dekodieren ----
+    const worte = befehlsText(c);
+    yield { ph: "D", phasenEnde: true, txt: `Der Dekodierer erkennt den Befehlscode ${c.op}: ${worte}.`,
+      mv: [{ von: "ir.op", nach: "dek", wert: String(c.op), bus: "i" }], set() { m.dek = worte; } };
+    // ---- Ausführen ----
+    const adresse = () => ({ ph: "X", txt: `Der Operand ${x} ist die Adresse der Zelle ${n}. Sie geht an den Speicher.`,
+      mv: [{ von: "ir.arg", nach: "mem:" + x, wert: String(x), bus: "a" }], set() { m.sel = x; } });
+    const woher = adr ? `Der Wert von ${n}` : `Die Zahl ${zahl(x)} aus dem Befehlsregister`;
+    if (c.mn === "ld") {
+      if (adr) yield adresse();
+      const v = adr ? m.wert(x) : x;
+      yield { ph: "X", einfach: true, ende: true, txt: `${woher}${adr ? ` (${zahl(v)})` : ""} wird in den Akku geladen.`, stxt: `${c.txt}: ${woher}${adr ? ` (${zahl(v)})` : ""} wird in den Akku geladen.`,
+        mv: [{ von: quelle, nach: "acc", wert: v, bus: "d" }], set() { m.acc = v; fertig(); } };
+    } else if (c.mn === "st") {
+      yield adresse();
+      const v = m.acc;
+      yield { ph: "X", einfach: true, ende: true, txt: `Der Wert des Akkus (${zahl(v)}) wird in ${n} gespeichert.`, stxt: `${c.txt}: Der Wert des Akkus (${zahl(v)}) wird in ${n} gespeichert.`,
+        mv: [{ von: "acc", nach: "mem:" + x, wert: v, bus: "d" }], set() { m.daten[x - DATEN0] = v; fertig(); } };
+    } else if (c.mn === "in") {
+      yield { ph: "X", einfach: true, eingabe: true, name: n, txt: `Der Rechner wartet auf eine Eingabe für ${n}. Tippe eine ganze Zahl und drücke Enter.`, set(v) { m.ein = v; } };
+      yield adresse();
+      const v = m.ein;
+      yield { ph: "X", einfach: true, ende: true, txt: `Die Eingabe ${zahl(v)} wird in ${n} gespeichert.`, stxt: `${c.txt}: Die Eingabe ${zahl(v)} wird in ${n} gespeichert.`,
+        mv: [{ von: "ein", nach: "mem:" + x, wert: v, bus: "d" }], set() { m.daten[x - DATEN0] = v; fertig(); } };
+    } else if (c.mn === "out") {
+      if (adr) yield adresse();
+      const v = adr ? m.wert(x) : x;
+      yield { ph: "X", einfach: true, ende: true, ausgabe: true, txt: `${woher}${adr ? ` (${zahl(v)})` : ""} wird ausgegeben.`, stxt: `${c.txt}: ${woher}${adr ? ` (${zahl(v)})` : ""} wird ausgegeben.`,
+        mv: [{ von: quelle, nach: "aus", wert: v, bus: "d" }], set() { m.aus = v; m.ausgaben.push(v); fertig(); } };
+    } else if (b.sym) {   // add, sub, mul, div, mod, cmp
+      if (adr) yield adresse();
+      const v = adr ? m.wert(x) : x, ak = m.acc;
+      yield { ph: "X", txt: `${woher}${adr ? ` (${zahl(v)})` : ""} kommt ins Operandenregister.`, mv: [{ von: quelle, nach: "opd", wert: v, bus: "d" }], set() { m.opd = v; m.sel = -1; } };
+      yield { ph: "X", puls: "alu", txt: c.mn === "cmp" ? "Die Steuerlogik stellt das Rechenwerk auf „Vergleichen“." : `Die Steuerlogik stellt das Rechenwerk auf „${b.sym}“.`, set() { m.alu = b.sym; } };
+      const beide = [{ von: "acc", nach: "alu", wert: ak, bus: "i" }, { von: "opd", nach: "alu", wert: v, bus: "i" }];
+      if (c.mn === "cmp") {
+        const rel = ak < v ? "<" : ak > v ? ">" : "=", wort = { "<": "kleiner als", "=": "gleich", ">": "größer als" }[rel];
+        yield { ph: "X", txt: `Das Rechenwerk vergleicht den Akku (${zahl(ak)}) mit dem Operanden (${zahl(v)}).`, mv: beide, set() { m.erg = Math.sign(ak - v); } };
+        yield { ph: "X", einfach: true, ende: true, txt: `Der Akku ist ${wort} ${zahl(v)}. Das Vergleichsregister merkt sich „${rel}“.`, stxt: `${c.txt}: Der Akku (${zahl(ak)}) ist ${wort} ${zahl(v)}. Das wird gemerkt.`,
+          mv: [{ von: "erg", nach: "vgl", wert: rel, bus: "i" }], smv: [{ von: quelle, nach: "vgl", wert: v, bus: "d" }],
+          set() { m.vgl = rel; m.vglTxt = `${zahl(ak)} ${rel} ${zahl(v)}`; fertig(); } };
+        return;
+      }
+      if ((c.mn === "div" || c.mn === "mod") && v === 0) {
+        yield { ph: "X", einfach: true, txt: "", set() { m.fehler = `Fehler bei „${c.txt}“ (Zeile ${c.zeile}): Durch null kann man nicht teilen.`; } };
+        return;
+      }
+      const r = c.mn === "add" ? ak + v : c.mn === "sub" ? ak - v : c.mn === "mul" ? ak * v : c.mn === "div" ? Math.floor(ak / v) : ak - v * Math.floor(ak / v);
+      const term = `${zahl(ak)} ${b.sym} ${v < 0 ? "(" + zahl(v) + ")" : zahl(v)} = ${zahl(r)}`;
+      if (Math.abs(r) > MAXWERT) {
+        yield { ph: "X", einfach: true, txt: "", set() { m.fehler = `Fehler bei „${c.txt}“ (Zeile ${c.zeile}): ${term} passt nicht in den Zahlenbereich von −${MAXWERT} bis ${MAXWERT}.`; } };
+        return;
+      }
+      yield { ph: "X", txt: `Das Rechenwerk rechnet ${term}.`, mv: beide, set() { m.erg = r; } };
+      yield { ph: "X", einfach: true, ende: true, txt: `Das Ergebnis ${zahl(r)} kommt in den Akku.`, stxt: `${c.txt}: ${term}. Das Ergebnis steht im Akku.`,
+        mv: [{ von: "erg", nach: "acc", wert: r, bus: "i" }], smv: [{ von: quelle, nach: "acc", wert: `${b.sym} ${zahl(v)}`, bus: "d" }],
+        set() { m.acc = r; m.rechnung = term; fertig(); } };
+    } else if (b.ziel) {
+      const springe = grund => ({ ph: "X", einfach: true, ende: true, txt: `${grund}Der Befehlszähler wird auf ${p2(x)} gesetzt.`, stxt: `${c.mn}: ${grund}Sprung zu Adresse ${p2(x)}.`,
+        mv: [{ von: "ir.arg", nach: "pc", wert: p2(x), bus: "i" }], set() { m.pc = x; fertig(); } });
+      if (!b.rel) { yield springe(""); return; }
+      if (!m.vgl) { yield { ph: "X", einfach: true, txt: "", set() { m.fehler = `Fehler bei „${c.mn}“ (Zeile ${c.zeile}): Es wurde noch nichts verglichen. Vor dem Sprung fehlt ein cmp.`; } }; return; }
+      yield { ph: "X", puls: "vgl", txt: `Die Steuerlogik liest das Vergleichsregister: „${m.vgl}“. ${c.mn} springt nur bei „${b.rel}“.` };
+      if (m.vgl === b.rel) yield springe(`Der Akku war ${b.wort}. `);
+      else yield { ph: "X", einfach: true, ende: true, puls: "pc", txt: `Der Akku war nicht ${b.wort}: kein Sprung. Es geht bei Adresse ${p2(m.pc)} weiter.`,
+        stxt: `${c.mn}: Der Akku war nicht ${b.wort}, also kein Sprung. Es geht bei Adresse ${p2(m.pc)} weiter.`, set() { fertig(); } };
+    } else {
+      yield { ph: "X", einfach: true, ende: true, txt: "end: Das Programm ist beendet.", set() { m.fertig = true; fertig(); } };
+    }
+  }
+}
+/* </KERN> */
+
+/* ================= Oberfläche ================= */
+const $ = id => document.getElementById(id);
+const KENNUNG = "neomops";
+
+/* ---- Beispielprogramme. Die Lösungen erscheinen nur im Lehrermodus. ---- */
+const BEISPIELE = [
+  { name: "Zwei Zahlen addieren", info: "Eingabe, Rechnen, Ausgabe", src: "; Zwei Zahlen addieren\nin a\nin b\nld a\nadd b\nst c\nout c\nend\n" },
+  { name: "Die größere Zahl", info: "Vergleich und Sprung", src: "; Gibt die größere von zwei Zahlen aus\nin a\nin b\nld a\ncmp b\njgt aIstGroesser\nout b\njmp fertig\nout a :aIstGroesser\nend :fertig\n" },
+  { name: "Einmaleins", info: "Schleife mit Zähler", src: "; Einmaleins-Reihe einer Zahl\nin a          ; welche Reihe?\nld 1\nst b          ; b zählt von 1 bis 10\nld b :nochmal\nmul a\nst c\nout c\nld b\nadd 1\nst b\ncmp 11\njlt nochmal\nend\n" },
+];
+const LOESUNGEN = [
+  { name: "Countdown", info: "Aufgabe 3, mit Marken", src: "in a          ;Speichere Eingabe in a\nld a          ;Lade Wert von a in AKKU\ncmp 0 :sprung ;Vergleiche AKKU mit 0\njeq ende      ;Wenn gleich dann springe nach ende\nsub 1         ;Subtrahiere 1 von AKKU\nst a          ;Speichere Wert aus AKKU in a\njmp sprung    ;Springe zu sprung\nend :ende     ;Ende des Programms\n" },
+  { name: "Countdown", info: "mit Zeilensprüngen (#)", src: "in $64\nld $64\ncmp 0\njeq #8\nsub 1\nst $64\njmp #2\nend" },
+  { name: "Kleiner Gauß mit Schleife", info: "fußgesteuert", src: "in a\n\nld 1\nst b\nst c\n\nadd 1 :marke\nst b\n\nadd c\nst c\n\nld b\ncmp a\njlt marke\n\nout c\nend\n" },
+  { name: "Kleiner Gauß mit Schleife", info: "kopfgesteuert", src: "in a ; Voreinstellungen des Programmes\nld 1\nst b\nst c\nld b :Anfang ;laden und überprüfen von b zu a\ncmp a\njeq end; sprung zum Ende\nadd 1 ;inkrementierung von b\nst b\nadd c\nst c\njmp Anfang ;sprung zum Anfang\nout c :end ;Ausgabe des Ergebnisses\nend" },
+  { name: "Kleiner Gauß mit Formel", info: "n · (n + 1) : 2", src: ";Programm zum\n;Bilden der Summe\n;von 1 bis zur\n;Eingabe\n;\n;Abfrage der Zahl\nin $64\n;Summe nach der\n;Formel berechnen\nld $64\nadd 1\nmul $64\ndiv 2\nst $65\n\n;Ausgabe\nout $65\nend\n" },
+  { name: "ggT nach Euklid", info: "mit Marken", src: ";ggT nach dem\n;euklidischen\n;Algorithmus\n;\n;Abfrage der Zahlen\nin a\nin b\n; a = 0 ?\nld a\ncmp 0\njeq AusgabeB\n; b = 0 ?\nld b :AbfrageB\ncmp 0\njeq AusgabeA\n; a > b ?\nld a\ncmp b\njgt FallJa\n; b = b - a\nld b\nsub a\nst b\njmp AbfrageB\n; a = a - b\nld a :FallJa\nsub b\nst a\njmp AbfrageB\n; Ausgabe von b\nout b :AusgabeB\njmp Schluss\nout a :AusgabeA\nend :Schluss\n" },
+];
+const HILFE = { ld: "Lädt einen Wert in den Akku.", st: "Speichert den Akku in einer Variablen.", in: "Liest eine Zahl ein und speichert sie in einer Variablen.",
+  out: "Gibt einen Wert aus.", add: "Addiert einen Wert zum Akku.", sub: "Subtrahiert einen Wert vom Akku.", mul: "Multipliziert den Akku mit einem Wert.",
+  div: "Teilt den Akku durch einen Wert. Der Rest fällt weg.", mod: "Berechnet den Rest, der beim Teilen des Akkus bleibt.", cmp: "Vergleicht den Akku mit einem Wert und merkt sich: kleiner, gleich oder größer. Der Akku bleibt, wie er ist.",
+  jmp: "Springt immer zum Ziel.", jlt: "Springt, wenn der Akku beim letzten Vergleich kleiner war.", jeq: "Springt, wenn der Akku beim letzten Vergleich gleich war.",
+  jgt: "Springt, wenn der Akku beim letzten Vergleich größer war.", end: "Beendet das Programm. Steht immer am Schluss." };
+
+/* ---- Moodle (SCORM 1.2): Außerhalb von Moodle passiert hier nichts. ---- */
+const SCORM = (() => {
+  function findApi(win) {
+    for (let i = 0; win && i < 10; i++) {
+      try { if (win.API) return win.API; } catch (e) { return null; }   // fremde Domain: kein Zugriff
+      if (win.parent === win) break;
+      win = win.parent;
+    }
+    return null;
+  }
+  let api = null;
+  try { api = findApi(window) || (window.opener && findApi(window.opener)); } catch (e) { api = null; }
+  if (!api) return null;
+  try { api.LMSInitialize(""); } catch (e) { return null; }
+  window.addEventListener("pagehide", () => { try { if (moodleOffen) { localStorage.setItem(STORE, standText()); speichereMoodle(); } api.LMSCommit(""); api.LMSFinish(""); } catch (e) {} });
+  return api;
+})();
+function scormGet(key) { try { return SCORM ? SCORM.LMSGetValue(key) : ""; } catch (e) { return ""; } }
+
+/* ---- Zustand, der gespeichert wird: Quelltext und Einstellungen ---- */
+// Speicher je Schüler: Auf einem geteilten Browserprofil darf niemand den Stand eines anderen erben.
+const NUTZER = scormGet("cmi.core.student_id");
+const STORE = KENNUNG + (LEHRERMODUS ? "-lehrer" : "-1") + (NUTZER ? "-" + NUTZER : "");
+const STANDARD = { src: BEISPIELE[0].src, mode: "ein", tempo: 2, gran: "mikro", ausStopp: false, fertig: false, breite: 0 };   // breite: Breite des Programmbereichs in px, 0 = automatisch
+let Z = Object.assign({}, STANDARD);
+const standText = () => JSON.stringify(Object.assign({}, Z, { t: Date.now() }));
+(() => {
+  let lokal = null, moodle = null;
+  try { const roh = localStorage.getItem(STORE); if (roh) lokal = JSON.parse(roh); } catch (e) {}
+  try { const sd = scormGet("cmi.suspend_data"); if (sd) moodle = JSON.parse(sd); } catch (e) {}
+  // Der neuere Stand gilt: Moodle kann zurückliegen, wenn der Quelltext zu lang war oder das Fenster schnell geschlossen wurde
+  const stand = lokal && moodle ? ((lokal.t || 0) > (moodle.t || 0) ? lokal : moodle) : lokal || moodle;
+  if (stand && typeof stand.src === "string") Z = Object.assign({}, STANDARD, stand);
+  if (!["ein", "adv"].includes(Z.mode)) Z.mode = "ein";
+  Z.breite = Z.breite > 0 ? Math.min(1200, Math.max(200, Math.round(Z.breite))) : 0;
+  if (!["mikro", "phase", "befehl"].includes(Z.gran)) Z.gran = "mikro";
+  Z.tempo = Math.min(5, Math.max(1, Z.tempo | 0)) || 2;
+})();
+if (SCORM && scormGet("cmi.core.lesson_status") !== "completed") { try { SCORM.LMSSetValue("cmi.core.lesson_status", "incomplete"); } catch (e) {} }
+// Lehrermodus: per Schalter in Zeile 6 oder per Strg + Umschalt + L
+let lehrer = LEHRERMODUS, lehrerStand = null, lehrerDaten = null;
+let saveTimer = null, scormTimer = null, moodleOffen = false;
+function sichere() {
+  if (lehrer && !LEHRERMODUS) return;   // mit dem Tastenkürzel wird nichts gespeichert, der Stand des Schülers bleibt unberührt
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try { localStorage.setItem(STORE, standText()); } catch (e) {} }, 250);
+  if (!SCORM) return;
+  clearTimeout(scormTimer);
+  moodleOffen = true;
+  scormTimer = setTimeout(speichereMoodle, 1500);
+}
+function speichereMoodle() {
+  clearTimeout(scormTimer);
+  moodleOffen = false;
+  try {
+    const json = standText();
+    if (json.length <= 4000) SCORM.LMSSetValue("cmi.suspend_data", json);   // Grenze von SCORM 1.2: 4096 Zeichen. Längere Quelltexte bleiben im Browser.
+    if (Z.fertig) SCORM.LMSSetValue("cmi.core.lesson_status", "completed");
+    SCORM.LMSCommit("");
+  } catch (e) {}
+}
+
+/* ---- Laufzeit ---- */
+// Datenspeicher a bis h: bleibt über Zurücksetzen, Neustart und Programmwechsel hinweg stehen (Variablen muss das Programm selbst vorbelegen).
+// Erst das Neuladen der Seite leert ihn; gespeichert wird er nicht.
+let DATEN = new Array(8).fill(0);
+let U = uebersetze(Z.src), M = new Rechner(U.zellen, DATEN);
+let lauf = "bereit";          // bereit · laeuft · pause · eingabe · ende · fehler
+let laufNr = 0, pumpt = false, angehalten = false, halt = "ende", gen = null;
+let phase = "", satz = "", aktZeile = 0, aktAdr = 0, protokoll = [], eingabeFertig = null;
+const TEMPO = [0, 0.5, 1, 2.6, 1, Infinity];   // Stufe 4 „Schnell“ zeigt keine wandernden Marken, siehe pumpe()
+const TEMPONAME = ["", "Langsam", "Normal", "Zügig", "Schnell", "Sofort"];
+const faktor = () => TEMPO[Z.tempo];
+const flott = () => Z.tempo === 4;
+const einfach = () => Z.mode === "ein";
+const bild = () => new Promise(r => requestAnimationFrame(r));
+const weich = x => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+
+// Läuft dauer Millisekunden (beim Tempo „Normal“) und ruft male(0…1) auf. Pause hält die Zeit an, Zurücksetzen bricht ab (Ergebnis false).
+function tween(dauer, male) {
+  return new Promise(fertig => {
+    const nr = laufNr; let t = 0, zuletzt = performance.now();
+    (function schritt(jetzt) {
+      if (nr !== laufNr) return fertig(false);
+      const dt = Math.min(Math.max(jetzt - zuletzt, 0), 60); zuletzt = jetzt;
+      if (!angehalten) t = faktor() === Infinity ? 1 : t + dt * faktor() / dauer;
+      const x = Math.min(t, 1);
+      male(x);
+      if (x >= 1) fertig(true); else requestAnimationFrame(schritt);
+    })(zuletzt);
+  });
+}
+
+/* ================= Zeichnung des Rechners ================= */
+const NS = "http://www.w3.org/2000/svg", svg = $("svg");
+function sv(tag, at, eltern, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in at) e.setAttribute(k, at[k]);
+  if (text !== undefined) e.textContent = text;
+  if (eltern) eltern.appendChild(e);
+  return e;
+}
+let K = {}, INNEN = {}, G = {}, bauArt = "";
+const bauSoll = () => (einfach() ? (U.zellen.length > 32 ? "ein4" : "ein2") : "adv");
+
+function einheit(x, y, w, h, cls, titel) {
+  sv("rect", { x, y, width: w, height: h, rx: 14, class: "unit " + cls }, G.unit);
+  sv("text", { x: x + 16, y: y + 27, class: "utitel" }, G.unit, titel);
+}
+// Ein Register: Kasten mit Wert. o.lab = [Text, Lage o|r|l|u], o.stub = Leitung vom Bus zum Kasten je Busart
+function reg(name, x, y, w, h, o = {}) {
+  if (o.lab) {
+    const [t, lage] = o.lab;
+    const at = lage === "o" ? { x, y: y - 7 } : lage === "r" ? { x: x + w + 10, y: y + h / 2, "dominant-baseline": "central" }
+      : lage === "l" ? { x: x - 10, y: y + h / 2, "dominant-baseline": "central", "text-anchor": "end" } : { x: x + w / 2, y: y + h + 16, "text-anchor": "middle" };
+    sv("text", Object.assign({ class: "lab" }, at), G.reg, t);
+  }
+  const g = sv("g", { class: "reg " + (o.cls || "") }, G.reg);
+  const box = sv("rect", { x, y, width: w, height: h, rx: o.rx === undefined ? 7 : o.rx, class: "box" }, g);
+  const txt = sv("text", { x: o.links ? x + 12 : x + w / 2, y: y + h / 2 + 0.5, class: "val" + (o.links ? " links" : "") }, g);
+  return (K[name] = { g, box, txt, x, y, w, h, cx: x + w / 2, cy: y + h / 2, stub: o.stub || {} });
+}
+function linie(pts, cls) { return sv("path", { d: pfad(pts), class: cls || "bus" }, G.bus); }
+// Linienzug mit abgerundeten Ecken
+function pfad(roh, r = 9) {
+  const pts = roh.filter((p, i) => !i || p[0] !== roh[i - 1][0] || p[1] !== roh[i - 1][1]);
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+    const l1 = Math.hypot(x1 - x0, y1 - y0), l2 = Math.hypot(x2 - x1, y2 - y1), rr = Math.min(r, l1 / 2, l2 / 2);
+    d += `L${x1 - (x1 - x0) / l1 * rr},${y1 - (y1 - y0) / l1 * rr}Q${x1},${y1} ${x1 + (x2 - x1) / l2 * rr},${y1 + (y2 - y1) / l2 * rr}`;
+  }
+  const e = pts[pts.length - 1];
+  return d + `L${e[0]},${e[1]}`;
+}
+
+function baue() {
+  bauArt = bauSoll();
+  const adv = bauArt === "adv";
+  svg.textContent = ""; K = {}; INNEN = {};
+  svg.classList.toggle("ein", !adv);
+  for (const n of ["unit", "bus", "spur", "reg", "tok"]) G[n] = sv("g", {}, svg);
+  // ---- Speicher: Programmspalten und Datenspalte ----
+  const sp = adv ? { sp: 4, x0: 30, px: 130, cw: 102, y0: 108, py: 35.6, ch: 28, dx: 556, dw: 64, w: 676 }
+    : bauArt === "ein4" ? { sp: 4, x0: 24, px: 100, cw: 72, y0: 98, py: 36.4, ch: 29, dx: 430, dw: 62, w: 540 }
+    : { sp: 2, x0: 30, px: 176, cw: 136, y0: 98, py: 36.4, ch: 30, dx: 392, dw: 96, w: 540 };
+  const TA = adv ? 738 : 576, TD = adv ? 712 : 576, YA = adv ? 54 : 60, YD = adv ? 72 : 60, R = adv ? 80 : 64;   // R: Versatz der rechten Hälfte
+  einheit(12, 10, sp.w, 680, "u-mem", "Speicher");
+  if (adv) {
+    sv("rect", { x: 28, y: 46, width: 644, height: 34, rx: 8, class: "bar" }, G.unit);
+    sv("text", { x: 350, y: 63.5, class: "bartxt" }, G.unit, "Speicherlogik");
+    sv("rect", { x: 488, y: 23, width: 16, height: 6, rx: 3, fill: "var(--bus-a)" }, G.unit); sv("text", { x: 510, y: 26.5, class: "legende" }, G.unit, "Adressbus");
+    sv("rect", { x: 582, y: 23, width: 16, height: 6, rx: 3, fill: "var(--bus-d)" }, G.unit); sv("text", { x: 604, y: 26.5, class: "legende" }, G.unit, "Datenbus");
+    linie([[TA, YA], [672, YA]], "bus a"); linie([[TD, YD], [672, YD]], "bus d");
+  }
+  K.zeiger = sv("rect", { x: 0, y: 0, width: 24, height: 19, rx: 6, class: "zeiger" }, G.reg);
+  K.adr = []; K.zpos = [];
+  const zelle = (i, x, y, w, zeilen) => {
+    const cx = x + 24 + w / 2, cy = y + sp.ch / 2;
+    K.adr[i] = sv("text", { x: x + 20, y: cy + 0.5, class: "adr" }, G.reg, p2(i));
+    K.zpos[i] = [x - 1.5, cy - 9.5];
+    reg("mem:" + i, x + 24, y, w, sp.ch, { rx: 6, stub: { a: [[TA, YA], [cx, YA], [cx, cy]], d: [[TD, YD], [cx, YD], [cx, cy]] } });
+    if (i % 16 === 0 || i === DATEN0) linie([[cx, adv ? 80 : YD], [cx, y + (zeilen - 1) * sp.py + sp.ch / 2]], "bus duenn");
+    return cx;
+  };
+  let ersteSpalte = 0;
+  for (let i = 0; i < sp.sp * 16; i++) { const cx = zelle(i, sp.x0 + Math.floor(i / 16) * sp.px, sp.y0 + (i % 16) * sp.py, sp.cw, 16); if (!i) ersteSpalte = cx; }
+  for (let j = 0; j < 8; j++) {
+    zelle(DATEN0 + j, sp.dx, sp.y0 + j * sp.py, sp.dw, 8);
+    sv("text", { x: sp.dx + 24 + sp.dw + 8, y: sp.y0 + j * sp.py + sp.ch / 2 + 0.5, class: "name" }, G.reg, "abcdefgh"[j]);
+    const g = K["mem:" + (DATEN0 + j)].g;
+    g.classList.add("wahl"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button");
+    g.setAttribute("aria-label", `Wert von ${"abcdefgh"[j]} ändern`);
+    sv("title", {}, g, `Klicke, um den Wert von ${"abcdefgh"[j]} zu ändern`);
+    g.addEventListener("click", () => bearbeite(j));
+    g.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); bearbeite(j); } });
+  }
+  K.zellenZahl = sp.sp * 16;
+  if (!adv) linie([[TD, YD], [ersteSpalte, YD]]);
+  sv("text", { x: sp.x0 + 24, y: sp.y0 - 9, class: "sub" }, G.bus, "Programm");
+  sv("text", { x: sp.dx + 24, y: sp.y0 - 9, class: "sub" }, G.bus, "Daten");
+
+  if (adv) {
+    // ---- Steuerwerk ----
+    einheit(R + 680, 10, 508, 222, "u-ctl", "Steuerwerk");
+    K.pillen = {};
+    [["F", "Holen", 918, 66], ["D", "Dekodieren", 990, 96], ["X", "Ausführen", 1092, 84]].forEach(([k, t, x, w]) => {
+      const g = sv("g", { class: "pille" }, G.reg);
+      sv("rect", { x: R + x, y: 20, width: w, height: 23, rx: 11.5 }, g); sv("text", { x: R + x + w / 2, y: 32 }, g, t);
+      K.pillen[k] = g;
+    });
+    reg("pc", R + 704, 70, 64, 32, { lab: ["Befehlszähler", "o"], stub: { a: [[TA, 86], [R + 704, 86]] } });
+    const ir = reg("ir", R + 704, 126, 150, 32, { lab: ["Befehlsregister", "o"], stub: { a: [[TA, 135], [R + 704, 135]], d: [[TD, 151], [R + 704, 151]] } });   // Adresse oben, Daten unten: so kreuzen sich die Busse nicht
+    sv("line", { x1: R + 754, y1: 126, x2: R + 754, y2: 158, stroke: "var(--cell-s)", "stroke-width": 1.4 }, ir.g);
+    ir.txt.setAttribute("x", R + 729);
+    K.irArg = { g: ir.g, txt: sv("text", { x: R + 804, y: 142.5, class: "val" }, ir.g) };
+    reg("dek", R + 704, 184, 460, 36, { links: true, lab: ["Dekodierer", "o"] });
+    INNEN["ir.op>dek"] = [[R + 729, 158], [R + 729, 184]];
+    INNEN["ir.arg>pc"] = [[R + 854, 142], [R + 884, 142], [R + 884, 86], [R + 768, 86]];
+    // ---- Rechenwerk ----
+    einheit(R + 680, 242, 508, 254, "u-alu", "Rechenwerk");
+    reg("opd", R + 795, 304, 90, 32, { lab: ["Operand", "l"], stub: { d: [[TD, 286], [R + 840, 286], [R + 840, 304]] } });
+    reg("acc", R + 925, 304, 90, 32, { stub: { d: [[TD, 286], [R + 970, 286], [R + 970, 304]] } });
+    sv("text", { x: R + 1066, y: 320, class: "lab", "dominant-baseline": "central" }, G.reg, "Akku");
+    sv("text", { x: R + 992, y: 384, class: "lab", "dominant-baseline": "central" }, G.reg, "ALU");
+    const ag = sv("g", { class: "reg" }, G.reg);
+    sv("polygon", { points: [[805, 350], [884, 350], [905, 370], [926, 350], [1005, 350], [950, 412], [860, 412]].map(q => `${R + q[0]},${q[1]}`).join(" "), class: "alu" }, ag);
+    K.alu = { g: ag, txt: sv("text", { x: R + 905, y: 393, class: "alusym" }, ag), cx: R + 905, cy: 390, stub: {} };
+    reg("erg", R + 860, 428, 90, 32, { lab: ["Ergebnis", "u"] });
+    reg("vgl", R + 716, 428, 50, 32, { lab: ["Vergleich", "u"] });
+    INNEN["acc>alu"] = [[R + 970, 336], [R + 970, 372]]; INNEN["opd>alu"] = [[R + 840, 336], [R + 840, 372]];
+    INNEN["erg>acc"] = [[R + 950, 444], [R + 1046, 444], [R + 1046, 320], [R + 1015, 320]];
+    INNEN["erg>vgl"] = [[R + 860, 444], [R + 766, 444]];
+    linie([[R + 905, 412], [R + 905, 428]], "bus duenn");
+    // ---- Ein- und Ausgabe ----
+    einheit(R + 680, 506, 508, 184, "u-io", "Ein- und Ausgabe");
+    reg("ein", R + 704, 548, 90, 34, { lab: ["Eingabe", "r"], stub: { d: [[TD, 565], [R + 704, 565]] } });
+    reg("aus", R + 704, 626, 90, 34, { lab: ["Ausgabe", "r"], stub: { d: [[TD, 643], [R + 704, 643]] } });
+    K.verlauf = sv("text", { x: R + 880, y: 643, class: "hinweis" }, G.reg); K.verlaufMax = 30;
+  } else {
+    einheit(R + 536, 10, 668, 220, "u-ctl", "Steuerwerk");
+    reg("pc", R + 560, 70, 90, 46, { cls: "gross", lab: ["Befehlszähler", "o"], stub: { d: [[TD, 93], [R + 560, 93]] } });
+    sv("text", { x: R + 668, y: 93, class: "hinweis" }, G.reg, "Adresse des nächsten Befehls");
+    reg("ir", R + 560, 156, 200, 46, { cls: "gross", lab: ["Befehlsregister", "o"], stub: { d: [[TD, 179], [R + 560, 179]] } });
+    K.dek = { txt: sv("text", { x: R + 778, y: 179, class: "hinweis" }, G.reg) };
+    INNEN["ir.arg>pc"] = [[R + 712, 156], [R + 712, 134], [R + 605, 134], [R + 605, 116]];
+    einheit(R + 536, 240, 668, 220, "u-alu", "Rechenwerk");
+    reg("acc", R + 560, 298, 120, 50, { cls: "gross", lab: ["Akku", "o"], stub: { d: [[TD, 323], [R + 560, 323]] } });
+    K.rechnung = sv("text", { x: R + 704, y: 323, class: "hinweis gr" }, G.reg);
+    reg("vgl", R + 560, 394, 160, 42, { cls: "gross", lab: ["Vergleich", "o"], stub: { d: [[TD, 415], [R + 560, 415]] } });
+    sv("text", { x: R + 738, y: 415, class: "hinweis" }, G.reg, "Ergebnis des letzten cmp");
+    einheit(R + 536, 470, 668, 220, "u-io", "Ein- und Ausgabe");
+    reg("ein", R + 560, 530, 120, 46, { cls: "gross", lab: ["Eingabe", "o"], stub: { d: [[TD, 553], [R + 560, 553]] } });
+    reg("aus", R + 560, 616, 120, 46, { cls: "gross", lab: ["Ausgabe", "o"], stub: { d: [[TD, 639], [R + 560, 639]] } });
+    K.verlauf = sv("text", { x: R + 704, y: 639, class: "hinweis" }, G.reg); K.verlaufMax = 46;
+  }
+  // ---- Leitungen: Busstämme, Stichleitungen zu den Registern, innere Verbindungen ----
+  for (const b of adv ? ["a", "d"] : ["d"]) {
+    const x = b === "a" ? TA : TD, ys = [b === "a" ? YA : YD];
+    const cls = adv ? "bus " + b : "bus";
+    for (const n in K) { const s = K[n] && K[n].stub && K[n].stub[b]; if (s && !n.startsWith("mem:")) { ys.push(s[0][1]); linie(s, cls); } }
+    linie([[x, Math.min(...ys)], [x, Math.max(...ys)]], cls);
+  }
+  for (const k in INNEN) linie(INNEN[k], "bus duenn");
+  for (const n in K) if (K[n] && K[n].txt) K[n].alt = null;
+}
+
+const komp = name => K[name.startsWith("mem:") ? name : name.split(".")[0]];
+function route(mv) {
+  const hin = INNEN[mv.von + ">" + mv.nach], her = INNEN[mv.nach + ">" + mv.von];
+  if (hin) return hin;
+  if (her) return her.slice().reverse();
+  const b = mv.bus === "a" ? "a" : "d", A = komp(mv.von).stub, B = komp(mv.nach).stub;
+  return (A[b] || A.d).slice().reverse().concat(B[b] || B.d);
+}
+function markenText(mv) {
+  if (mv.zelle) return einfach() ? mv.zelle.txt : `${mv.zelle.op} ${z4(mv.zelle.arg)}`;
+  return typeof mv.wert === "number" ? (einfach() ? zahl(mv.wert) : z4(mv.wert)) : mv.wert;
+}
+// Lässt Marken mit Werten über die Leitungen wandern (mehrere gleichzeitig). Ergebnis false, wenn zurückgesetzt wurde.
+function fliege(mvs) {
+  const teile = mvs.map(mv => {
+    const bus = mv.bus || "d", p = sv("path", { d: pfad(route(mv)), class: "trace " + bus }, G.spur), len = p.getTotalLength();
+    p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
+    const t = markenText(mv), w = Math.max(36, t.length * 9.2 + 18), g = sv("g", { class: "tok " + bus }, G.tok);
+    sv("rect", { x: -w / 2, y: -13, width: w, height: 26, rx: 13 }, g); sv("text", { x: 0, y: 1 }, g, t);
+    const q = komp(mv.von); q.g.classList.add("quelle");
+    return { p, len, g, q };
+  });
+  const male = x => {
+    const e = weich(x), s = Math.min(1, 0.55 + x * 5, 0.55 + (1 - x) * 6);
+    for (const t of teile) {
+      const pt = t.p.getPointAtLength(t.len * e);
+      t.g.setAttribute("transform", `translate(${pt.x.toFixed(2)},${pt.y.toFixed(2)}) scale(${s.toFixed(3)})`);
+      t.p.style.strokeDashoffset = t.len * (1 - e);
+    }
+  };
+  male(0);
+  return tween(380 + Math.max(...teile.map(t => t.len)) * 0.9, male).then(ok => {
+    for (const t of teile) { t.q.g.classList.remove("quelle"); t.g.remove(); t.p.style.opacity = 0; setTimeout(() => t.p.remove(), 700); }
+    return ok;
+  });
+}
+function nochmal(el, cls) { el.classList.remove(cls); el.getBoundingClientRect(); el.classList.add(cls); }
+function setze(k, text, pop) {
+  if (!k || k.alt === text) return;
+  k.txt.textContent = text;
+  if (pop && k.alt !== null && k.g) nochmal(k.g, "pop");
+  k.alt = text;
+}
+let selAlt = -1, pcAlt = -1;
+// Bringt die Zeichnung auf den Stand des Rechners. pop: geänderte Werte hüpfen kurz.
+function zeige(pop) {
+  const adv = !einfach(), m = M, f = v => (adv ? z4(v) : zahl(v));
+  setze(K.pc, p2(m.pc), pop);
+  if (adv) {
+    setze(K.ir, m.ir ? String(m.ir.op) : "00", pop); setze(K.irArg, m.ir ? z4(m.ir.arg) : "0000", pop);
+    K.ir.g.classList.toggle("leer", !m.ir);
+    setze(K.dek, m.dek, false); setze(K.opd, f(m.opd), pop); setze(K.erg, f(m.erg), pop); setze(K.alu, m.alu, false);
+    setze(K.vgl, m.vgl || "–", pop);
+    for (const k in K.pillen) K.pillen[k].classList.toggle("an", phase === k && (lauf === "laeuft" || lauf === "pause" || lauf === "eingabe"));
+  } else {
+    setze(K.ir, m.ir ? m.ir.txt : "–", pop);
+    setze(K.dek, m.dek ? m.dek + "." : "", false);
+    setze(K.vgl, m.vglTxt || "–", pop);
+    if (K.rechnung.textContent !== m.rechnung) K.rechnung.textContent = m.rechnung;
+  }
+  setze(K.acc, f(m.acc), pop); setze(K.ein, f(m.ein), pop); setze(K.aus, f(m.aus), pop);
+  for (let i = 0; i < K.zellenZahl; i++) {
+    const c = m.zellen[i], k = K["mem:" + i];
+    setze(k, c ? (adv ? `${c.op} ${z4(c.arg)}` : c.txt) : adv ? "00 0000" : "", false);
+    k.g.classList.toggle("leer", !c); K.adr[i].classList.toggle("frei", !c);
+  }
+  for (let j = 0; j < 8; j++) setze(K["mem:" + (DATEN0 + j)], f(m.daten[j]), pop);
+  if (selAlt !== m.sel) {
+    if (K["mem:" + selAlt]) K["mem:" + selAlt].g.classList.remove("sel");
+    if (K["mem:" + m.sel]) K["mem:" + m.sel].g.classList.add("sel");
+    selAlt = m.sel;
+  }
+  const zeigt = m.zellen.length && m.pc < K.zellenZahl;
+  K.zeiger.style.opacity = zeigt ? 1 : 0;
+  if (zeigt) K.zeiger.style.transform = `translate(${K.zpos[m.pc][0]}px,${K.zpos[m.pc][1]}px)`;
+  if (pcAlt !== m.pc || !zeigt) {
+    if (K.adr[pcAlt]) K.adr[pcAlt].classList.remove("zeiger-txt");
+    if (zeigt) K.adr[m.pc].classList.add("zeiger-txt");
+    pcAlt = zeigt ? m.pc : -1;
+  }
+  let v = m.ausgaben.map(zahl).join(" · ");
+  if (v.length > K.verlaufMax) v = "… " + v.slice(v.length - K.verlaufMax).replace(/^[^·]*· /, "");
+  v = m.ausgaben.length > 1 ? "Verlauf: " + v : "";
+  if (K.verlauf.textContent !== v) K.verlauf.textContent = v;
+  zeigeZeile(); zeigeText(); zeigeKnoepfe();
+  if (!$("prot").hidden) maleProtokoll();
+}
+
+/* ================= Editor ================= */
+const src = $("src"), farbe = $("farbe"), rinne = $("rinne");
+const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+function faerbe(z) {
+  const k = z.indexOf(";"), code = k < 0 ? z : z.slice(0, k), kom = k < 0 ? "" : z.slice(k);
+  const dp = code.indexOf(":"), vorn = dp < 0 ? code : code.slice(0, dp), marke = dp < 0 ? "" : code.slice(dp);
+  const m = /^(\s*)(\S*)(\s*)([\s\S]*)$/.exec(vorn), mn = m[2].toLowerCase(), b = Object.prototype.hasOwnProperty.call(BEFEHLE, mn) ? BEFEHLE[mn] : null;
+  let h = m[1] + (m[2] ? `<span class="${b ? "t-k" : "t-x"}">${esc(m[2])}</span>` : "") + m[3];
+  if (m[4]) {
+    const a = m[4].trim().toLowerCase(), cls = b && b.ziel ? "t-l" : /^[+-]?\d+$/.test(a) ? "t-n" : /^([a-h]|\$\s*\d+)$/.test(a) ? "t-v" : "";
+    h += cls ? `<span class="${cls}">${esc(m[4])}</span>` : esc(m[4]);
+  }
+  return h + (marke ? `<span class="t-l">${esc(marke)}</span>` : "") + (kom ? `<span class="t-c">${esc(kom)}</span>` : "");
+}
+let meldungenSichtbar = true;
+function maleEditor() {
+  const zeilen = src.value.split("\n");
+  const fz = new Set(meldungenSichtbar ? U.fehler.map(f => f.zeile) : []), wz = new Set(meldungenSichtbar ? U.warnungen.map(f => f.zeile) : []);
+  farbe.innerHTML = "<div>" + zeilen.map((z, i) => `<div class="z${fz.has(i + 1) ? " err" : ""}">${faerbe(z)}</div>`).join("") + "</div>";
+  rinne.innerHTML = zeilen.map((z, i) => `<div class="${fz.has(i + 1) ? "err" : wz.has(i + 1) ? "wrn" : ""}">${i + 1}</div>`).join("");
+  zeileAlt = 0; rolle(); zeigeZeile();
+}
+function rolle() { farbe.scrollTop = src.scrollTop; farbe.scrollLeft = src.scrollLeft; rinne.scrollTop = src.scrollTop; }
+let zeileAlt = 0;
+function zeigeZeile() {
+  const z = U.ok ? aktZeile : 0;
+  if (z === zeileAlt) return;
+  const liste = farbe.firstChild ? farbe.firstChild.children : [];
+  for (const [nr, an] of [[zeileAlt, false], [z, true]]) if (nr && liste[nr - 1]) { liste[nr - 1].classList.toggle("cur", an); rinne.children[nr - 1].classList.toggle("cur", an); }
+  zeileAlt = z;
+  if (z && lauf !== "bereit") {   // die bearbeitete Zeile im Blick halten
+    const lh = 23, oben = 8 + (z - 1) * lh;
+    if (oben < src.scrollTop + lh) src.scrollTop = Math.max(0, oben - 2 * lh);
+    else if (oben + lh > src.scrollTop + src.clientHeight - lh) src.scrollTop = oben - src.clientHeight + 3 * lh;
+    rolle();
+  }
+}
+function maleMeldungen() {
+  const chip = $("chip"), meld = $("meld"), n = U.zellen.length;
+  if (!meldungenSichtbar) { chip.className = "chip leer"; chip.textContent = "…"; return; }
+  chip.className = "chip " + (U.ok ? "ok" : U.leer ? "leer" : "fehler");
+  chip.textContent = U.ok ? `✓ ${n} ${n === 1 ? "Befehl" : "Befehle"}` : U.leer ? "leer" : `${U.fehler.length} Fehler`;
+  const zeile = (m, cls) => `<button class="${cls}" data-zeile="${m.zeile}">${m.zeile ? `<b>Zeile ${m.zeile}:</b>` : ""}${esc(m.text)}</button>`;
+  meld.innerHTML = (U.leer ? "<p>Schreibe oben dein Programm: ein Befehl je Zeile, am Ende steht <b>end</b>. Unter „Befehle“ findest du alle Befehle.</p>"
+    : U.fehler.map(m => zeile(m, "err")).join("")) + U.warnungen.map(m => zeile(m, "wrn")).join("")
+    || "<p>Keine Fehler. Der Rechner ist startklar.</p>";
+}
+let meldTimer = null;
+// Nach jeder Änderung: neu übersetzen und den Rechner zurücksetzen. Fehler erscheinen erst nach einer kurzen Tipppause.
+function quelltextGeaendert(sofort) {
+  Z.src = src.value;
+  U = uebersetze(Z.src); M = new Rechner(U.zellen, DATEN); protokoll = [];
+  clearTimeout(meldTimer);
+  meldungenSichtbar = sofort || U.ok;
+  if (!meldungenSichtbar) meldTimer = setTimeout(() => { meldungenSichtbar = true; maleEditor(); maleMeldungen(); zeigeText(); }, 800);
+  stoppe();
+  if (bauArt !== bauSoll()) baue();
+  maleEditor(); maleMeldungen(); zeige(false); sichere();
+}
+function ladeQuelltext(text, start) { if (start) DATEN = start.slice(); src.value = text.replace(/\r\n?/g, "\n"); src.scrollTop = 0; quelltextGeaendert(true); }
+
+/* ================= Ablauf ================= */
+function stoppe() {   // alles anhalten und den Rechner auf den Anfang setzen
+  laufNr++; pumpt = false; angehalten = false; gen = null; phase = ""; satz = "";
+  M.reset();
+  aktZeile = M.zellen.length ? M.zellen[0].zeile : 0; aktAdr = 0; protokoll = [];
+  if (G.spur) { G.spur.textContent = ""; G.tok.textContent = ""; for (const n in K) if (K[n] && K[n].g) K[n].g.classList.remove("quelle", "pop", "puls"); }
+  if (eingabeFertig) { const f = eingabeFertig; eingabeFertig = null; f(null); }
+  $("eingabe").hidden = true; schliesseWert();
+  lauf = "bereit";
+}
+function zuruecksetzen() { stoppe(); zeige(false); }
+function stoppt(st) {
+  if (st.ende && st.ausgabe && Z.ausStopp && !einfach()) return true;
+  if (halt === "ende") return false;
+  if (einfach() || halt === "befehl") return !!st.ende;
+  if (halt === "phase") return !!(st.phasenEnde || st.ende);
+  return true;
+}
+function merke(st) {   // Zeile fürs Ablaufprotokoll (Lehrermodus)
+  const c = M.ir;
+  protokoll.push([M.anzahl, p2(aktAdr), c ? c.txt : "", zahl(M.acc), M.vgl || "", ...M.daten.map(zahl), st.ausgabe ? zahl(M.aus) : ""]);
+  if (protokoll.length > 2000) protokoll.splice(0, protokoll.length - 2000);
+}
+// Arbeitet die Schritte ab, bis ein Haltepunkt erreicht ist
+async function pumpe() {
+  if (pumpt) return;
+  pumpt = true; lauf = "laeuft";
+  const nr = laufNr; let n = 0, t0 = performance.now();
+  zeigeKnoepfe();
+  while (true) {
+    if (!gen) { gen = M.befehl(); aktAdr = M.pc; aktZeile = M.zellen[M.pc] ? M.zellen[M.pc].zeile : aktZeile; }
+    const r = gen.next();
+    if (r.done) { gen = null; continue; }
+    const st = r.value, ein = einfach(), sofort = faktor() === Infinity;
+    if (ein && !st.einfach) { if (st.set) st.set(); continue; }   // in der einfachen Ansicht laufen die Zwischenschritte unsichtbar mit
+    phase = st.ph; satz = (ein && st.stxt) || st.txt;
+    if (st.eingabe) {
+      lauf = "eingabe"; zeige(false);
+      const v = await frageEingabe();
+      if (nr !== laufNr) return;
+      st.set(v); lauf = angehalten ? "pause" : "laeuft"; zeige(true);
+      continue;
+    }
+    if (!sofort && st.txt) {
+      zeigeZeile(); zeigeText(); if (!ein) zeige(false);
+      const mv = (ein && st.smv) || st.mv;
+      if (flott()) { /* keine Marke: Der Wert erscheint gleich am Ziel */ }
+      else if (mv) { if (!(await fliege(mv))) return; }
+      else { if (st.puls && komp(st.puls)) nochmal(komp(st.puls).g, "puls"); if (!(await tween(650, () => {}))) return; }
+    }
+    if (st.set) st.set();
+    if (st.ende) { merke(st); if (!M.fertig) aktZeile = M.zellen[M.pc] ? M.zellen[M.pc].zeile : aktZeile; }
+    if (M.fehler) { lauf = "fehler"; break; }
+    if (M.fertig) { lauf = "ende"; if (!Z.fertig && !lehrer) { Z.fertig = true; sichere(); } break; }
+    if (stoppt(st)) { lauf = "pause"; break; }
+    if (sofort) {
+      if (++n % 400 === 0 || performance.now() - t0 > 12) { zeige(false); await bild(); if (nr !== laufNr) return; t0 = performance.now(); }
+      while (angehalten) { await bild(); if (nr !== laufNr) return; }
+    } else {
+      zeige(true);
+      // „Schnell“ hält nur kurz am Ende einer Phase und eines Befehls inne, damit man die Werte noch wechseln sieht
+      const dauer = flott() ? (st.ende ? (ein ? 100 : 55) : st.phasenEnde && !ein ? 25 : 0) : st.ende ? 260 : 150;
+      if (dauer && !(await tween(dauer, () => {}))) return;
+    }
+  }
+  pumpt = false; angehalten = false;
+  zeige(faktor() !== Infinity);
+}
+function start() {
+  if (!U.ok || lauf === "eingabe") return;
+  if (lauf === "laeuft") { angehalten = true; lauf = "pause"; zeigeKnoepfe(); return; }
+  if (lauf === "ende" || lauf === "fehler") stoppe();
+  halt = "ende"; angehalten = false;
+  if (pumpt) { lauf = "laeuft"; zeigeKnoepfe(); } else pumpe();
+}
+function schritt() {
+  if (!U.ok || lauf === "eingabe") return;
+  if (lauf === "ende" || lauf === "fehler") stoppe();
+  halt = einfach() ? "befehl" : Z.gran; angehalten = false;
+  if (pumpt) { lauf = "laeuft"; zeigeKnoepfe(); } else pumpe();
+}
+function frageEingabe() {
+  const form = $("eingabe"), feld = $("einFeld");
+  form.hidden = false; feld.value = ""; feld.classList.remove("falsch");
+  legeEingabe(); feld.focus();
+  return new Promise(r => { eingabeFertig = r; });
+}
+function legeEingabe() {   // das Eingabefeld liegt genau auf dem Eingaberegister
+  const form = $("eingabe");
+  if (form.hidden || !K.ein) return;
+  const r = K.ein.box.getBoundingClientRect(), s = $("szene").getBoundingClientRect();
+  const h = Math.max(r.height, 32), w = Math.max(r.width + 40, 150);
+  Object.assign(form.style, { left: r.left - s.left + "px", top: r.top - s.top - (h - r.height) / 2 + "px", width: w + "px", height: h + "px" });
+}
+/* ---- Variablen a bis h von Hand ändern (nicht im Lauf): Der Wert steht dann einfach im Speicher ---- */
+let wertNr = -1;
+const zahlText = t => { t = t.trim().replace("−", "-"); return /^[+-]?\d+$/.test(t) && Math.abs(parseInt(t, 10)) <= MAXWERT ? parseInt(t, 10) : null; };
+function bearbeite(j) {
+  if (lauf === "laeuft" || lauf === "eingabe") return;
+  wertNr = j;
+  const form = $("wert"), feld = $("wertFeld");
+  form.hidden = false; feld.classList.remove("falsch"); feld.value = String(M.daten[j]);
+  legeWert(); feld.focus(); feld.select();
+}
+function legeWert() {
+  const form = $("wert"), k = K["mem:" + (DATEN0 + wertNr)];
+  if (form.hidden || !k) return;
+  const r = k.box.getBoundingClientRect(), s = $("szene").getBoundingClientRect();
+  const h = Math.max(r.height, 30), w = Math.max(r.width, 76);
+  Object.assign(form.style, { left: r.left - s.left - (w - r.width) / 2 + "px", top: r.top - s.top - (h - r.height) / 2 + "px", width: w + "px", height: h + "px" });
+}
+function schliesseWert() { $("wert").hidden = true; wertNr = -1; }
+$("wert").addEventListener("submit", e => {
+  e.preventDefault();
+  const feld = $("wertFeld"), v = zahlText(feld.value), j = wertNr;
+  if (v === null || j < 0) { nochmal(feld, "falsch"); feld.select(); return; }
+  M.daten[j] = v; schliesseWert();
+  zeige(true);
+});
+$("wertFeld").addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); schliesseWert(); } });
+$("wertFeld").addEventListener("blur", () => { if (!$("wert").hidden) schliesseWert(); });
+$("eingabe").addEventListener("submit", e => {
+  e.preventDefault();
+  const feld = $("einFeld"), v = zahlText(feld.value);
+  if (v === null) {
+    nochmal(feld, "falsch"); satz = `Das geht nicht. Tippe eine ganze Zahl von −${MAXWERT} bis ${MAXWERT}.`; zeigeText(); feld.select();
+    return;
+  }
+  $("eingabe").hidden = true;
+  const f = eingabeFertig; eingabeFertig = null;
+  if (f) f(v);
+});
+
+/* ---- Erklärzeile und Knöpfe ---- */
+const SYM = {
+  start: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.5 5h4v14h-4zM13.5 5h4v14h-4z"/></svg>',
+};
+function zeigeText() {
+  const z = $("zeile"), ph = $("phase");
+  let t = satz, art = "";
+  if (!U.ok) t = U.leer || !meldungenSichtbar ? "Schreibe links dein Programm. Der Rechner übersetzt es beim Tippen." : "Im Programm steckt noch ein Fehler. Die Hinweise stehen unter dem Editor.";
+  else if (lauf === "fehler") { t = M.fehler; art = "fehler"; }
+  else if (lauf === "ende") { t = "Fertig! Das Programm ist beendet." + (M.ausgaben.length ? ` Ausgabe: ${M.ausgaben.slice(-12).map(zahl).join(", ")}` : ""); art = "fertig"; }
+  else if (lauf === "bereit") t = "Bereit. „Start“ lässt das Programm laufen, mit dem Knopf daneben gehst du es Schritt für Schritt durch.";
+  z.className = "karte zeile " + art;
+  const pt = { F: "Holen", D: "Dekodieren", X: "Ausführen" }[phase];
+  ph.hidden = !(pt && U.ok && (lauf === "laeuft" || lauf === "pause" || lauf === "eingabe"));
+  if (!ph.hidden && ph.textContent !== pt) ph.textContent = pt;
+  if ($("text").textContent !== t) $("text").textContent = t;
+}
+let knopfAlt = "";
+function zeigeKnoepfe() {
+  const s = $("startBtn"), k = lauf + U.ok;
+  if (k === knopfAlt) return;
+  knopfAlt = k;
+  s.innerHTML = lauf === "laeuft" ? SYM.pause + "Pause" : SYM.start + (lauf === "pause" ? "Weiter" : lauf === "ende" || lauf === "fehler" ? "Neu starten" : "Start");
+  s.disabled = $("schrittBtn").disabled = !U.ok || lauf === "eingabe";
+  $("resetBtn").disabled = lauf === "bereit";
+  svg.classList.toggle("belegt", lauf === "laeuft" || lauf === "eingabe");
+  if (lauf === "laeuft" || lauf === "eingabe") schliesseWert();
+}
+$("startBtn").addEventListener("click", start);
+$("schrittBtn").addEventListener("click", schritt);
+$("resetBtn").addEventListener("click", zuruecksetzen);
+function zeigeEinstellungen() {
+  $("tempo").value = Z.tempo; $("tempoTxt").textContent = TEMPONAME[Z.tempo]; svg.classList.toggle("flott", flott());
+  $("gran").value = Z.gran; $("ausStopp").checked = Z.ausStopp;
+  $("schrittTxt").textContent = einfach() ? "Schritt" : { mikro: "1 Mikroschritt", phase: "1 Phase", befehl: "1 Befehl" }[Z.gran];
+  $("modEin").setAttribute("aria-pressed", einfach()); $("modAdv").setAttribute("aria-pressed", !einfach());
+  document.body.classList.toggle("adv", !einfach());
+  setzeBreite(Z.breite, false);
+}
+$("tempo").addEventListener("input", e => { Z.tempo = +e.target.value; zeigeEinstellungen(); sichere(); });
+$("gran").addEventListener("change", e => { Z.gran = e.target.value; zeigeEinstellungen(); sichere(); });
+$("ausStopp").addEventListener("change", e => { Z.ausStopp = e.target.checked; sichere(); });
+function setzeAnsicht(mode) {
+  if (Z.mode === mode) return;
+  Z.mode = mode; stoppe(); zeigeEinstellungen(); baue(); zeige(false); sichere();
+}
+$("modEin").addEventListener("click", () => setzeAnsicht("ein"));
+$("modAdv").addEventListener("click", () => setzeAnsicht("adv"));
+
+/* ---- Editor-Ereignisse ---- */
+src.addEventListener("input", () => quelltextGeaendert(false));
+src.addEventListener("scroll", rolle);
+$("meld").addEventListener("click", e => {
+  const b = e.target.closest("button[data-zeile]"); if (!b) return;
+  const nr = +b.dataset.zeile; if (!nr) return src.focus();
+  const zeilen = src.value.split("\n"), anfang = zeilen.slice(0, nr - 1).reduce((s, z) => s + z.length + 1, 0);
+  src.focus(); src.setSelectionRange(anfang, anfang + zeilen[nr - 1].length);
+  src.scrollTop = Math.max(0, (nr - 4) * 23); rolle();
+});
+
+/* ---- Beispiele, Dateien, Hilfe, Design ---- */
+function maleBeispiele() {
+  const eintrag = (b, i, art) => `<button data-art="${art}" data-i="${i}">${esc(b.name)}<small>${esc(b.info)}</small></button>`;
+  $("bspListe").innerHTML = BEISPIELE.map((b, i) => eintrag(b, i, "b")).join("")
+    + (lehrer ? '<div class="gruppe">Lösungen (nur im Lehrermodus)</div>' + LOESUNGEN.map((b, i) => eintrag(b, i, "l")).join("") : "");
+}
+function menue(auf) { $("bspListe").hidden = !auf; $("bspBtn").setAttribute("aria-expanded", auf); }
+$("bspBtn").addEventListener("click", e => { e.stopPropagation(); menue($("bspListe").hidden); });
+document.addEventListener("click", e => { if (!e.target.closest(".menue")) menue(false); });
+const eigenesProgramm = () => src.value.trim() && !BEISPIELE.concat(LOESUNGEN).some(b => b.src.trim() === src.value.trim());
+$("bspListe").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  menue(false);
+  if (eigenesProgramm() && !confirm("Dein Programm im Editor wird durch das Beispiel ersetzt. Fortfahren?")) return;
+  ladeQuelltext((b.dataset.art === "l" ? LOESUNGEN : BEISPIELE)[+b.dataset.i].src);
+});
+$("oeffnenBtn").addEventListener("click", () => $("datei").click());
+$("datei").addEventListener("change", async e => {
+  const d = e.target.files[0]; e.target.value = "";
+  if (!d) return;
+  const bytes = await d.arrayBuffer();
+  let text;
+  try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch (err) { text = new TextDecoder("windows-1252").decode(bytes); }   // alte Dateien mit Umlauten
+  if (eigenesProgramm() && !confirm("Dein Programm im Editor wird durch die Datei ersetzt. Fortfahren?")) return;
+  // Projektdateien des MOPS-Nachbaus einer Kollegin (*.mops.json): Quelltext und Startwerte von a bis h
+  let start = null;
+  if (/^\s*\{/.test(text)) {
+    let p = null;
+    try { p = JSON.parse(text); } catch (err) {}
+    if (!p || typeof p.source !== "string") { alert("In dieser Datei steckt kein MOPS-Programm."); return; }
+    text = p.source;
+    if (Array.isArray(p.startData)) start = Array.from({ length: 8 }, (_, j) => { const v = Math.trunc(Number(p.startData[j])); return Math.abs(v) <= MAXWERT ? v : 0; });
+  }
+  ladeQuelltext(text, start);
+});
+$("speichernBtn").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([src.value], { type: "text/plain;charset=utf-8" }));
+  a.download = "programm.ass";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+$("hilfeInhalt").innerHTML = `<table><thead><tr><th>Befehl</th><th>Was er tut</th><th>Beispiel</th><th>Code</th></tr></thead><tbody>${Object.keys(BEFEHLE).map(mn => {
+  const b = BEFEHLE[mn], op = b.ohne ? "" : b.ziel ? " ziel" : b.val ? " x" : " var";
+  return `<tr><td><code>${mn}${op}</code></td><td>${HILFE[mn]}</td><td><code>${b.bsp}</code></td><td>${[b.adr, b.val, b.ziel, b.ohne].filter(Boolean).join(" / ")}</td></tr>`;
+}).join("")}</tbody></table>
+<h3>Schreibweise</h3><ul>
+<li>In jeder Zeile steht ein Befehl. Das Programm endet mit <code>end</code>. Groß- und Kleinschreibung ist egal.</li>
+<li><code>var</code> ist eine der acht Variablen <code>a</code> bis <code>h</code>. Sie liegen in den Speicherzellen <code>$64</code> bis <code>$71</code>, du kannst auch die Adresse schreiben.</li>
+<li><code>x</code> ist eine Variable oder eine ganze Zahl von −9999 bis 9999.</li>
+<li><code>ziel</code> ist eine Marke oder eine Zeilennummer mit Raute, zum Beispiel <code>#4</code>. Eine Marke legst du rechts neben einem Befehl mit Doppelpunkt an: <code>ld a :start</code>. Angesprungen wird sie ohne Doppelpunkt: <code>jmp start</code>.</li>
+<li>Alles hinter einem Semikolon ist ein Kommentar: <code>add 1 ; eins weiterzählen</code></li>
+<li>Jeder Befehl belegt eine Speicherzelle. Die Spalte „Code“ nennt den Befehlscode (erste Zahl: mit Variable, zweite Zahl: mit Zahl).</li></ul>
+<h3>Tasten</h3><ul><li><code>Strg + Enter</code>: Start und Weiter · <code>F6</code>: Schritt · <code>Leertaste</code>: Pause und Weiter · <code>Esc</code>: Zurücksetzen</li></ul>`;
+$("hilfeBtn").addEventListener("click", () => $("hilfe").showModal());
+$("hilfeZu").addEventListener("click", () => $("hilfe").close());
+$("hilfe").addEventListener("click", e => { if (e.target === $("hilfe")) $("hilfe").close(); });
+const DESIGN = KENNUNG + "-design";
+function setzeDesign(d) { document.documentElement.dataset.theme = d; }
+(() => { let d = null; try { d = localStorage.getItem(DESIGN); } catch (e) {} setzeDesign(d === "dark" ? "dark" : "light"); })();
+$("themaBtn").addEventListener("click", () => {
+  const d = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  setzeDesign(d); try { localStorage.setItem(DESIGN, d); } catch (e) {}
+});
+
+/* ---- Lehrermodus: Lösungen im Beispielmenü und Ablaufprotokoll ---- */
+function reiter(prot) {
+  $("tabProg").setAttribute("aria-pressed", !prot); $("tabProt").setAttribute("aria-pressed", prot);
+  $("editor").hidden = $("meld").hidden = prot; $("prot").hidden = $("protFuss").hidden = !prot;
+  if (prot) maleProtokoll(); else rolle();
+}
+$("tabProg").addEventListener("click", () => reiter(false));
+$("tabProt").addEventListener("click", () => reiter(true));
+const PROTKOPF = ["Nr.", "Adr.", "Befehl", "Akku", "Vgl", "a", "b", "c", "d", "e", "f", "g", "h", "Aus"];
+let protAlt = -1;
+function maleProtokoll() {
+  if (protAlt === protokoll.length && protokoll.length) return;
+  protAlt = protokoll.length;
+  const sicht = protokoll.slice(-300);
+  $("prot").innerHTML = `<table><thead><tr>${PROTKOPF.map(k => `<th>${k}</th>`).join("")}</tr></thead><tbody>${sicht.map(z => `<tr>${z.map(v => `<td>${esc(String(v))}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  $("prot").scrollTop = $("prot").scrollHeight;
+  $("protInfo").textContent = protokoll.length ? `${protokoll.length} Befehle` + (protokoll.length > 300 ? " (die letzten 300 sichtbar)" : "") : "Noch nichts gelaufen.";
+}
+$("protKopie").addEventListener("click", async () => {
+  const text = [PROTKOPF].concat(protokoll).map(z => z.join("\t")).join("\n");
+  try { await navigator.clipboard.writeText(text); $("protInfo").textContent = "Kopiert. In die Tabellenkalkulation einfügen."; }
+  catch (e) { $("protInfo").textContent = "Kopieren ist hier nicht erlaubt."; }
+});
+function zeigeLehrer() {
+  $("lehrerMarke").hidden = !lehrer; $("reiter").hidden = !lehrer; $("progTitel").hidden = lehrer;
+  if (!lehrer) reiter(false);
+  maleBeispiele();
+}
+function schalteLehrer() {
+  if (LEHRERMODUS) return;
+  lehrer = !lehrer;
+  if (lehrer) { clearTimeout(saveTimer); clearTimeout(scormTimer); if (moodleOffen) speichereMoodle(); lehrerStand = JSON.stringify(Z); lehrerDaten = DATEN.slice(); }
+  else { Z = JSON.parse(lehrerStand); lehrerStand = null; zeigeEinstellungen(); if (bauArt !== bauSoll()) baue(); ladeQuelltext(Z.src, lehrerDaten); }
+  zeigeLehrer();
+}
+
+/* ---- Griff zwischen Programm und Rechner ---- */
+function setzeBreite(b, merken) {
+  Z.breite = b > 0 ? Math.min(1200, Math.max(200, Math.round(b))) : 0;
+  const h = document.querySelector(".haupt");
+  if (Z.breite) h.style.setProperty("--links", Z.breite + "px"); else h.style.removeProperty("--links");
+  if (merken) sichere();
+}
+(() => {
+  const g = $("griff"), links = document.querySelector(".links");
+  let x0 = 0, b0 = 0, zieht = false;
+  const ende = e => { if (!zieht) return; zieht = false; document.body.classList.remove("zieht"); setzeBreite(links.getBoundingClientRect().width, true); };   // gemerkt wird die wirklich erreichte Breite
+  g.addEventListener("pointerdown", e => { if (e.button) return; e.preventDefault(); zieht = true; x0 = e.clientX; b0 = links.getBoundingClientRect().width; g.setPointerCapture(e.pointerId); document.body.classList.add("zieht"); });
+  g.addEventListener("pointermove", e => { if (zieht) setzeBreite(Math.max(200, b0 + e.clientX - x0), false); });
+  g.addEventListener("pointerup", ende); g.addEventListener("pointercancel", ende);
+  g.addEventListener("dblclick", () => setzeBreite(0, true));
+  g.addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault(); setzeBreite(links.getBoundingClientRect().width + (e.key === "ArrowLeft" ? -16 : 16), true);
+    setzeBreite(links.getBoundingClientRect().width, true);
+  });
+})();
+
+/* ---- Tasten ---- */
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey && e.shiftKey && e.code === "KeyL") { e.preventDefault(); schalteLehrer(); return; }
+  if ($("hilfe").open) return;
+  const imFeld = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (lauf !== "laeuft") start(); }
+  else if (e.key === "F6") { e.preventDefault(); schritt(); }
+  else if (e.key === "Escape") { if (!$("bspListe").hidden) menue(false); else if (!$("resetBtn").disabled) { e.preventDefault(); zuruecksetzen(); } }   // Esc tut genau das, was der Knopf tut
+  else if (e.key === " " && !imFeld && e.target.tagName !== "BUTTON") { e.preventDefault(); start(); }
+});
+window.addEventListener("resize", () => { legeEingabe(); legeWert(); });
+if (window.ResizeObserver) new ResizeObserver(() => { legeEingabe(); legeWert(); }).observe($("szene"));
+
+/* ---- Start ---- */
+src.value = Z.src;
+zeigeEinstellungen(); zeigeLehrer(); baue(); stoppe(); maleEditor(); maleMeldungen(); zeige(false);
+</script>
+</body>
+</html>
